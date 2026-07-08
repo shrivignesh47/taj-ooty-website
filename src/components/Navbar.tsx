@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
+import WeatherWidget from "./WeatherWidget";
 
 const links = [
   { href: "#about", label: "About" },
@@ -27,8 +28,8 @@ export default function Navbar() {
   return (
     <header
       className={`fixed inset-x-0 z-50 transition-all duration-300 ${scrolled
-          ? "top-0 bg-[#350C0C] shadow-[0_1px_0_0_rgba(201,151,74,0.18)]"
-          : "top-9 bg-[#350C0C]/95 backdrop-blur-md"
+        ? "top-0 bg-[#350C0C] shadow-[0_1px_0_0_rgba(201,151,74,0.18)]"
+        : "top-9 bg-[#350C0C]/95 backdrop-blur-md"
         }`}
     >
       <nav className="mx-auto max-w-6xl px-6 sm:px-8 h-20 flex items-center justify-between">
@@ -47,7 +48,7 @@ export default function Navbar() {
         </a>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-9">
+        <div className="hidden md:flex items-center gap-7 lg:gap-9">
           {links.map(l => (
             <a
               key={l.href} href={l.href}
@@ -56,6 +57,9 @@ export default function Navbar() {
               {l.label}
             </a>
           ))}
+
+          <WeatherWidget />
+
           <a
             href="#visit"
             className="rounded-full bg-[#C9974A] px-5 py-2.5 text-sm font-semibold text-[#241B15] transition-all hover:scale-[1.03] hover:bg-[#d2a260]"
@@ -64,14 +68,17 @@ export default function Navbar() {
           </a>
         </div>
 
-        {/* Mobile hamburger */}
-        <button
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen(v => !v)}
-          className="md:hidden text-[#F6EEDF]"
-        >
-          {open ? <X size={26} /> : <Menu size={26} />}
-        </button>
+        {/* Mobile menu triggers */}
+        <div className="flex items-center gap-4 md:hidden">
+          <WeatherWidget compact={true} />
+          <button
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => setOpen(v => !v)}
+            className="text-[#F6EEDF]"
+          >
+            {open ? <X size={26} /> : <Menu size={26} />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile drawer */}
