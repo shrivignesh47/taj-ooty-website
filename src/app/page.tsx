@@ -5,6 +5,7 @@ import About from "@/components/About";
 import Gallery from "@/components/Gallery";
 import MenuPreview from "@/components/MenuPreview";
 import Testimonials from "@/components/Testimonials";
+import InstagramFeed from "@/components/InstagramFeed";
 import Visit from "@/components/Visit";
 import Footer from "@/components/Footer";
 
@@ -19,6 +20,7 @@ export default function Home() {
         <Gallery />
         <MenuPreview />
         <Testimonials />
+        <InstagramFeed />
         <Visit />
       </main>
       <Footer />
