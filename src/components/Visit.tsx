@@ -10,7 +10,7 @@ export default function Visit() {
   const [sent, setSent] = useState(false);
 
   return (
-    <section id="visit" className="bg-[#EFE3CC] px-6 py-24 sm:px-8 sm:py-32">
+    <section id="visit" className="bg-[#f6eedf] px-6 py-24 sm:px-8 sm:py-32">
       <div className="mx-auto max-w-6xl">
         <span className="eyebrow">Visit us</span>
         <h2 className="mt-4 font-display text-3xl text-[#4E1414] sm:text-4xl">
