@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  /* ─── Core palette — maroon/red + gold, matching the logo ───────────────── */
+
+  /* Dominant surfaces — deep maroon-red */
+  --color-maroon: #4E1414;
+  /* primary section bg */
+  --color-maroon-mid: #5C1616;
+  /* slightly lighter maroon for cards/hover */
+  --color-maroon-deep: #350C0C;
+  /* footer, deepest sections */
+  --color-banner: #311002;
+  /* offer strip */
+
+  /* Accent — logo gold (spoon-and-fork + lettering) */
+  --color-gold: #C9974A;
+  /* primary gold accent */
+  --color-gold-soft: #d2a260;
+  /* softer/lighter gold (hover, highlights) */
+  --color-gold-dim: #E4C88C;
+  /* very light gold for eyebrow text on dark */
+
+  /* Light surfaces — cream */
+  --color-cream: #F6EEDF;
+  /* light section backgrounds, cards */
+  --color-cream-dim: #EFE3CC;
+  /* slightly darker cream, alt sections */
+
+  /* Text */
+  --color-text-on-dark: #ffffff;
+  /* white text on maroon/dark */
+  --color-text-on-light: #241B15;
+  /* charcoal text on cream */
+  --color-text-muted: rgba(246, 238, 223, 0.70);
+  /* muted cream/70 on dark */
+  --color-text-dim: rgba(246, 238, 223, 0.50);
+  /* very dim on dark */
+
+  /* Misc */
+  --color-charcoal: #241B15;
+  --color-sage: #6E7A4F;
+  --color-clay: #B5502E;
+  --color-clay-dark: #8F3D22;
+
+  /* Border */
+  --color-border-gold: rgba(201, 151, 74, 0.22);
+  --color-border-cream: rgba(246, 238, 223, 0.12);
+}
+
+@theme inline {
+  --color-maroon: var(--color-maroon);
+  --color-maroon-mid: var(--color-maroon-mid);
+  --color-maroon-deep: var(--color-maroon-deep);
+  --color-banner: var(--color-banner);
+  --color-gold: var(--color-gold);
+  --color-gold-soft: var(--color-gold-soft);
+  --color-gold-dim: var(--color-gold-dim);
+  --color-cream: var(--color-cream);
+  --color-cream-dim: var(--color-cream-dim);
+  --color-charcoal: var(--color-charcoal);
+  --color-sage: var(--color-sage);
+  --color-clay: var(--color-clay);
+  --color-clay-dark: var(--color-clay-dark);
+
+  --font-display: var(--font-fraunces);
+  --font-body: var(--font-work-sans);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #4E1414;
+  color: #F6EEDF;
+  font-family: var(--font-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background: #C9974A;
+  color: #241B15;
+}
+
+:focus-visible {
+  outline: 2px solid #C9974A;
+  outline-offset: 3px;
+}
+
+/* Eyebrow label used across sections */
+.eyebrow {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #C9974A;
+}
+
+/* Torn top-edge for recipe-card signature element */
+.torn-edge {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 10px);
+  mask-image: linear-gradient(to bottom, transparent 0, black 10px);
+}
+
+/* Subtle noise overlay for texture */
+.paper-grain {
+  background-image: radial-gradient(rgba(201, 151, 74, 0.06) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+/* Marquee animation for offer strip */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Ken Burns slow zoom for image slides in the hero carousel */
+@keyframes kenburns {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(1.07);
+  }
+}
+
+.kenburns-wrapper {
+  transform-origin: center center;
+  animation: kenburns 8s ease-out forwards;
+}
