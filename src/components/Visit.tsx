@@ -112,6 +112,7 @@ export default function Visit() {
                   width={60}
                   height={20}
                   className="h-5 w-auto object-contain"
+                  style={{ width: "auto" }}
                 />
               </a>
 
@@ -128,6 +129,7 @@ export default function Visit() {
                   width={60}
                   height={20}
                   className="h-5 w-auto object-contain"
+                  style={{ width: "auto" }}
                 />
               </a>
 
@@ -137,6 +139,7 @@ export default function Visit() {
                 width={40}
                 height={40}
                 className="h-8 w-auto object-contain opacity-80"
+                style={{ width: "auto" }}
                 unoptimized
               />
             </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import React, { useEffect, useState, useRef } from "react";
+import { motion, useReducedMotion, AnimatePresence } from "framer-motion";
+import { getWeatherFoodSuggestion } from "@/lib/weatherSuggestions";
 
 type WeatherPhase = 'none' | 'sunrise' | 'sunset';
 type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'thunder' | 'fog';
@@ -18,9 +19,9 @@ const mapWmoCode = (code: number): WeatherCondition => {
     if (code <= 1) return 'clear';
     if (code === 2 || code === 3) return 'cloudy';
     if (code === 45 || code === 48) return 'fog';
-    if (code >= 51 && code <= 67) return 'rain'; // drizzle & freezing included
-    if (code >= 80 && code <= 82) return 'rain'; // showers
-    if (code >= 71 && code <= 77) return 'rain'; // map snow to rain styling as requested / close enough
+    if (code >= 51 && code <= 67) return 'rain';
+    if (code >= 80 && code <= 82) return 'rain';
+    if (code >= 71 && code <= 77) return 'rain';
     if (code === 85 || code === 86) return 'rain';
     if (code >= 95) return 'thunder';
     return 'cloudy'; // fallback
@@ -39,8 +40,15 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         return "";
     });
     const [error, setError] = useState(false);
+
+    // Popover & Badge State
+    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    const [showBadge, setShowBadge] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
     const prefersReduced = useReducedMotion();
 
+    // Time ticker
     useEffect(() => {
         const formatTime = () => {
             return new Date().toLocaleTimeString("en-US", {
@@ -55,6 +63,7 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         return () => clearInterval(timeInterval);
     }, []);
 
+    // Weather API routine
     useEffect(() => {
         const fetchWeather = async () => {
             try {
@@ -94,6 +103,73 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         const weatherInterval = setInterval(fetchWeather, 15 * 60 * 1000);
         return () => clearInterval(weatherInterval);
     }, []);
+
+    // Auto-open logic & tracking
+    useEffect(() => {
+        if (!weather || error || typeof window === 'undefined') return;
+
+        const autoShown = sessionStorage.getItem('weatherSuggestionAutoShown');
+        const wasClicked = sessionStorage.getItem('weatherPillClicked');
+
+        // Show badge if it hasn't been manually clicked yet
+        if (!wasClicked) {
+            setShowBadge(true);
+        }
+
+        // Auto-play the popover once per session
+        if (!autoShown && !prefersReduced) {
+            sessionStorage.setItem('weatherSuggestionAutoShown', 'true');
+
+            const openTimer = setTimeout(() => {
+                setIsPopoverOpen(true);
+
+                const closeTimer = setTimeout(() => {
+                    // Only auto-close if the user hasn't explicitly clicked it to keep it open
+                    setIsPopoverOpen((prev) => {
+                        return prev ? false : prev;
+                    });
+                }, 6000);
+
+                return () => clearTimeout(closeTimer);
+            }, 2500);
+
+            return () => clearTimeout(openTimer);
+        }
+    }, [weather, error, prefersReduced]);
+
+    // Popover outside clicks
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setIsPopoverOpen(false);
+            }
+        };
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsPopoverOpen(false);
+        };
+
+        if (isPopoverOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEsc);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEsc);
+        };
+    }, [isPopoverOpen]);
+
+
+    const handlePillClick = () => {
+        setIsPopoverOpen((v) => !v);
+        // User explicitly engaged - turn off badge
+        if (showBadge) {
+            setShowBadge(false);
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem('weatherPillClicked', 'true');
+            }
+        }
+    };
+
 
     if (error) return null;
 
@@ -205,40 +281,104 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         ? "bg-gradient-to-r from-[#C9974A]/20 to-transparent"
         : "";
 
+    const suggestion = weather ? getWeatherFoodSuggestion(weather.temp, weather.condition, weather.isDay) : null;
+
     return (
-        <motion.div
-            animate={prefersReduced ? {} : { boxShadow: ["0 0 0px rgba(201,151,74,0)", "0 0 6px rgba(201,151,74,0.3)", "0 0 0px rgba(201,151,74,0)"] }}
-            transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
-            className={`flex items-center gap-3 rounded-full px-4 py-2 border border-[#C9974A]/30 bg-[#241B15]/60 backdrop-blur-md relative overflow-hidden ${gradientClass} transition-colors duration-1000`}
-        >
-            {/* Sunrise/Sunset glowing orb effect under the icon */}
-            {weather?.phase !== 'none' && !prefersReduced && (
-                <div className="absolute left-1 top-1 w-10 h-10 rounded-full bg-orange-500/20 blur-xl pointer-events-none" />
-            )}
-
-            <div className="relative z-10 flex items-center justify-center">
-                {renderIcon()}
-            </div>
-
-            <div className="relative z-10 flex flex-col items-start leading-[1.1]">
-                {weather ? (
-                    <>
-                        <span className="text-[13px] font-semibold text-[#F6EEDF] whitespace-nowrap">
-                            {!compact && "Ooty, "}{weather.temp}°C
-                        </span>
-                        {timeStr && (
-                            <span className="text-[10px] text-[#C9974A] mt-0.5 whitespace-nowrap font-medium tracking-[0.03em]">
-                                {timeStr}
-                            </span>
-                        )}
-                    </>
-                ) : (
-                    <>
-                        <div className="h-3 w-12 bg-[#C9974A]/20 rounded animate-pulse mb-1" />
-                        <div className="h-2 w-8 bg-[#C9974A]/10 rounded animate-pulse" />
-                    </>
+        <div className="relative" ref={containerRef}>
+            <button
+                onClick={handlePillClick}
+                aria-expanded={isPopoverOpen}
+                aria-label="Toggle weather menu suggestions"
+                className="w-full text-left outline-none user-select-none relative"
+            >
+                {/* Discoverability Pulsing Badge */}
+                {showBadge && (
+                    <span className="absolute -top-1 -right-1 z-20 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C9974A] opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[#C9974A] border cursor-pointer border-[#350C0C]"></span>
+                    </span>
                 )}
-            </div>
-        </motion.div>
+
+                <motion.div
+                    animate={prefersReduced ? {} : { boxShadow: ["0 0 0px rgba(201,151,74,0)", "0 0 6px rgba(201,151,74,0.3)", "0 0 0px rgba(201,151,74,0)"] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+                    className={`flex items-center gap-3 rounded-full px-4 py-2 border hover:border-[#C9974A]/60 transition-all ${isPopoverOpen ? 'border-[#C9974A]/60' : 'border-[#C9974A]/30'} bg-[#241B15]/60 backdrop-blur-md relative overflow-hidden ${gradientClass} duration-1000`}
+                >
+                    {/* Sunrise/Sunset glowing orb effect under the icon */}
+                    {weather?.phase !== 'none' && !prefersReduced && (
+                        <div className="absolute left-1 top-1 w-10 h-10 rounded-full bg-orange-500/20 blur-xl pointer-events-none" />
+                    )}
+
+                    <div className="relative z-10 flex items-center justify-center pointer-events-none">
+                        {renderIcon()}
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-start leading-[1.1] pointer-events-none">
+                        {weather ? (
+                            <>
+                                <span className="text-[13px] font-semibold text-[#F6EEDF] whitespace-nowrap">
+                                    {!compact && "Ooty, "}{weather.temp}°C
+                                </span>
+                                {timeStr && (
+                                    <span className="text-[10px] text-[#C9974A] mt-0.5 whitespace-nowrap font-medium tracking-[0.03em]">
+                                        {timeStr}
+                                    </span>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                <div className="h-3 w-12 bg-[#C9974A]/20 rounded animate-pulse mb-1" />
+                                <div className="h-2 w-8 bg-[#C9974A]/10 rounded animate-pulse" />
+                            </>
+                        )}
+                    </div>
+                </motion.div>
+            </button>
+
+            <AnimatePresence>
+                {isPopoverOpen && weather && suggestion && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                        transition={prefersReduced ? { duration: 0 } : { type: "spring", stiffness: 200, damping: 20 }}
+                        /* Mobile: fixed drawer style mapping just above bottom edge to avoid clipping. Desktop: pure dropdown. */
+                        className="fixed inset-x-4 top-24 z-[100] md:absolute md:inset-auto md:top-full md:right-0 md:mt-3 md:w-64 rounded-xl border border-[#C9974A]/30 bg-[#350C0C]/95 md:bg-[#350C0C] backdrop-blur-xl shadow-[0_16px_40px_rgba(36,27,21,0.8)] p-5 origin-top md:origin-top-right ring-1 ring-black/5"
+                    >
+                        {/* Caret pointing up (desktop only) connecting to the pill */}
+                        <div className="hidden md:block absolute -top-1.5 right-10 w-3 h-3 rotate-45 border-l border-t border-[#C9974A]/30 bg-[#350C0C]" />
+
+                        <div className="flex flex-col gap-1 mb-4">
+                            <span className="text-sm font-bold tracking-wide text-[#F6EEDF]">
+                                {weather.temp}°C · {suggestion.description}
+                            </span>
+                            <span className="text-xs text-[#F6EEDF]/70 italic">
+                                {suggestion.message}
+                            </span>
+                        </div>
+
+                        <div className="flex flex-col gap-2 relative z-10">
+                            {suggestion.categories.map((cat) => (
+                                <a
+                                    key={cat}
+                                    href="#menu"
+                                    onClick={() => {
+                                        setIsPopoverOpen(false);
+                                        // Actively dismiss the badge if navigating from within it
+                                        setShowBadge(false);
+                                        if (typeof window !== 'undefined') {
+                                            sessionStorage.setItem('weatherPillClicked', 'true');
+                                        }
+                                    }}
+                                    className="block w-full rounded-md border border-[#C9974A]/20 bg-[#241B15]/50 px-3 py-2.5 text-xs font-semibold tracking-wide text-[#C9974A] hover:bg-[#C9974A] hover:text-[#241B15] transition-colors shadow-sm"
+                                >
+                                    {cat}
+                                </a>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 }
