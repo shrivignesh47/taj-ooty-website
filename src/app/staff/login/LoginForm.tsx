@@ -18,13 +18,22 @@ export function LoginForm() {
         setLocalError("");
 
         const formData = new FormData(e.currentTarget);
-        const res = await loginStaff(formData);
+        try {
+            const res = await loginStaff(formData);
 
-        if (res?.error) {
-            setLocalError(res.error);
+            if (res?.error) {
+                setLocalError(res.error);
+                setIsLoading(false);
+            } else if (res?.success && res.redirectUrl) {
+                window.location.href = res.redirectUrl;
+            } else {
+                setLocalError("Unexpected response from server.");
+                setIsLoading(false);
+            }
+        } catch (err) {
+            setLocalError("Network error. Please refresh the page or restart the server.");
             setIsLoading(false);
         }
-        // Success redirect is magically handled by the Server Action
     };
 
     return (

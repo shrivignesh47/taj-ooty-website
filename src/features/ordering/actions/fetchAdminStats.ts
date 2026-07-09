@@ -2,6 +2,7 @@
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
+import { verifyStaff } from './auth';
 
 // Use service role for admin aggregations to bypass RLS and guarantee fast data delivery
 const supabaseAdmin = createClient(
@@ -11,7 +12,12 @@ const supabaseAdmin = createClient(
 
 export async function fetchAdminDashboardData() {
     try {
-        const [tablesRes, ordersRes, staffRes, menuRes] = await Promise.all([
+        const auth = await verifyStaff();
+        if (!auth.success || !auth.user) {
+            return { success: false, error: 'Unauthorized Session' };
+        }
+
+        const [tablesRes, ordersRes, staffRes, menuRes, rolesRes, permsRes] = await Promise.all([
             supabaseAdmin.from('restaurant_tables').select('*').order('table_no'),
             supabaseAdmin.from('orders')
                 .select(`
@@ -21,16 +27,21 @@ export async function fetchAdminDashboardData() {
                 `)
                 .order('created_at', { ascending: false }),
             supabaseAdmin.from('staff_users').select('*, roles (name)'),
-            supabaseAdmin.from('menu_items').select('*, categories(name)').order('name')
+            supabaseAdmin.from('menu_items').select('*, categories(name)').order('name'),
+            supabaseAdmin.from('roles').select('*, role_permissions(permissions(key))').order('name'),
+            supabaseAdmin.from('permissions').select('*')
         ]);
 
         return {
             success: true,
+            activeUser: { name: auth.user.name, roleName: auth.user.roleName, permissions: auth.user.permissions },
             tables: tablesRes.data || [],
             orders: ordersRes.data || [],
             staff: staffRes.data || [],
             menu: menuRes.data || [],
-            errors: [tablesRes.error, ordersRes.error, staffRes.error, menuRes.error].filter(Boolean)
+            roles: rolesRes.data || [],
+            permissions: permsRes.data || [],
+            errors: [tablesRes.error, ordersRes.error, staffRes.error, menuRes.error, rolesRes.error, permsRes.error].filter(Boolean)
         };
     } catch (e: any) {
         return { success: false, error: e.message };

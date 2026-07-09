@@ -14,7 +14,9 @@ export default function StaffLoginPage() {
                 </div>
 
                 <div className="bg-[#F6EEDF] rounded-2xl shadow-2xl p-8 border border-[#C9974A]/20">
-                    <LoginForm />
+                    <React.Suspense fallback={<div className="text-center p-4">Loading auth...</div>}>
+                        <LoginForm />
+                    </React.Suspense>
                 </div>
             </div>
         </main>

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList } from 'lucide-react';
 import { logoutStaff } from '@/features/ordering/actions/auth';
@@ -14,25 +14,36 @@ import { AdminMenuSync } from './components/AdminMenuSync';
 import { AdminCRM } from './components/AdminCRM';
 import { AdminOrders } from './components/AdminOrders';
 import { AdminActivityLog } from './components/AdminActivityLog';
+import { AdminStaff } from './components/AdminStaff';
+import { AdminRoles } from './components/AdminRoles';
+import { AdminAnalytics } from './components/AdminAnalytics';
+import { AdminSettings } from './components/AdminSettings';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const NAV_TABS = [
-    { id: 'Overview', label: 'Dashboard', icon: <Activity className="w-4 h-4" /> },
+    { id: 'Overview', label: 'Overview', icon: <Activity className="w-4 h-4" /> },
     { id: 'Orders', label: 'Orders', icon: <ClipboardList className="w-4 h-4" /> },
     { id: 'Tables', label: 'Tables', icon: <LayoutGrid className="w-4 h-4" /> },
     { id: 'Menu', label: 'Menu', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'Staff', label: 'Staff', icon: <Users className="w-4 h-4" /> },
+    { id: 'Roles', label: 'Roles', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'Customers', label: 'Customers', icon: <Users className="w-4 h-4" /> },
-    { id: 'Roles', label: 'Staff', icon: <ShieldCheck className="w-4 h-4" /> },
-    { id: 'Activity', label: 'Activity Log', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'Analytics', label: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'Export', label: 'Export', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'Activity', label: 'Activity Log', icon: <ClipboardList className="w-4 h-4" /> },
     { id: 'Settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
 ];
 
 export function AdminDash() {
     const [metrics, setMetrics] = useState({ revenue: 0, totalOrders: 0, activeTables: 0, monthlyVisits: 0 });
     const [staff, setStaff] = useState<any[]>([]);
+    const [roles, setRoles] = useState<any[]>([]);
+    const [permissions, setPermissions] = useState<any[]>([]);
     const [menu, setMenu] = useState<any[]>([]);
     const [tables, setTables] = useState<any[]>([]);
+    const [orders, setOrders] = useState<any[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
+    const [activeUser, setActiveUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Overview');
@@ -50,7 +61,7 @@ export function AdminDash() {
             return;
         }
 
-        const { tables: tableData, orders: allOrders, staff: staffData, menu: menuData } = result;
+        const { tables: tableData, orders: allOrders, staff: staffData, menu: menuData, roles: rolesData, permissions: permsData } = result as any;
 
         let rev = 0, active = 0, thisMonth = 0;
         const custMap = new Map<string, any>();
@@ -90,8 +101,12 @@ export function AdminDash() {
                 return { ...t, status: live ? 'Occupied' : 'Available', currentBill: live?.currentBill ?? 0, pax: live?.pax ?? 4, customers: live?.customers ?? null };
             }));
         }
+        if (allOrders) setOrders(allOrders);
+        if (result.activeUser) setActiveUser(result.activeUser);
         if (staffData) setStaff(staffData);
         if (menuData) setMenu(menuData);
+        if (rolesData) setRoles(rolesData);
+        if (permsData) setPermissions(permsData);
         setLoading(false);
     }, []);
 
@@ -133,9 +148,12 @@ export function AdminDash() {
                     return acc;
                 }, {} as any);
 
+                const rawPrice = norm.price || norm.cost || norm.rate || '0';
+                const cleanPrice = typeof rawPrice === 'string' ? rawPrice.replace(/[^0-9.]/g, '') : rawPrice;
+
                 return {
                     name: norm.name || norm.itemname || norm.title || norm.item || 'Imported Item',
-                    price: parseFloat(norm.price || norm.cost || norm.rate || '0'),
+                    price: parseFloat(cleanPrice) || 0,
                     category: norm.category || norm.type || norm.group || 'General'
                 };
             });
@@ -147,7 +165,14 @@ export function AdminDash() {
             ]);
 
             const { bulkAddMenuItems } = await import('@/features/ordering/actions/adminActions');
-            await bulkAddMenuItems(payload);
+            const res = await bulkAddMenuItems(payload);
+
+            if (!res.success) {
+                alert(`Upload failed: ${res.error}\n\nPlease check your excel formatting (prices must be numbers)`);
+                // Revert optimistic UI
+                fetchData();
+                return;
+            }
 
             // Re-fetch genuine ids from DB
             fetchData();
@@ -155,6 +180,34 @@ export function AdminDash() {
         };
         reader.readAsBinaryString(file);
     };
+
+    const hasPerm = useCallback((requiredPerm: string) => {
+        if (!activeUser) return false;
+        if (activeUser.roleName === 'admin') return true;
+        return activeUser.permissions?.includes(requiredPerm);
+    }, [activeUser]);
+
+    const permittedTabs = useMemo(() => NAV_TABS.filter(t => {
+        switch (t.id) {
+            case 'Overview': return hasPerm('view_dashboard');
+            case 'Orders': return hasPerm('manage_orders');
+            case 'Tables': return hasPerm('manage_orders');
+            case 'Menu': return hasPerm('edit_menu');
+            case 'Staff': return hasPerm('manage_staff');
+            case 'Roles': return hasPerm('manage_roles');
+            case 'Customers': return hasPerm('view_revenue');
+            case 'Analytics': return hasPerm('view_revenue');
+            case 'Activity': return hasPerm('view_activity_log');
+            case 'Settings': return hasPerm('manage_staff');
+            default: return true;
+        }
+    }), [hasPerm]);
+
+    useEffect(() => {
+        if (!loading && permittedTabs.length > 0 && !permittedTabs.find(t => t.id === activeTab)) {
+            setActiveTab(permittedTabs[0].id);
+        }
+    }, [permittedTabs, activeTab, loading]);
 
     if (loading) return (
         <div className="text-center text-[#4E1414] py-40 h-screen bg-[#F6EEDF] flex flex-col items-center justify-center">
@@ -186,7 +239,7 @@ export function AdminDash() {
                 </div>
 
                 <nav className="flex-grow px-3 py-4 space-y-1 overflow-y-auto taj-scrollbar">
-                    {NAV_TABS.map(tab => (
+                    {permittedTabs.map(tab => (
                         <SidebarItem
                             key={tab.id}
                             icon={tab.icon}
@@ -213,7 +266,7 @@ export function AdminDash() {
                 <header className="sticky top-0 z-40 bg-[#350C0C] border-b border-[#C9974A]/20 px-8 py-4 flex justify-between items-center shadow-md">
                     <div>
                         <h2 className="text-xl font-black text-[#F6EEDF] tracking-tight">
-                            {NAV_TABS.find(t => t.id === activeTab)?.label ?? activeTab}
+                            {permittedTabs.find(t => t.id === activeTab)?.label ?? activeTab}
                         </h2>
                         <p className="text-[#C9974A] text-xs font-semibold tracking-wide">Hotel Taj Ooty</p>
                     </div>
@@ -236,7 +289,7 @@ export function AdminDash() {
 
                         {activeTab === 'Orders' && (
                             <motion.div key="ord" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
-                                <AdminOrders />
+                                <AdminOrders orders={orders} />
                             </motion.div>
                         )}
 
@@ -265,29 +318,19 @@ export function AdminDash() {
 
                         {activeTab === 'Customers' && (
                             <motion.div key="crm" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
-                                <AdminCRM customers={customers} />
+                                <AdminCRM customers={customers} orders={orders} />
+                            </motion.div>
+                        )}
+
+                        {activeTab === 'Staff' && (
+                            <motion.div key="staff" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminStaff staff={staff} roles={roles} onStaffUpdated={fetchData} />
                             </motion.div>
                         )}
 
                         {activeTab === 'Roles' && (
-                            <motion.div key="roles" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                                {staff.length === 0 && (
-                                    <p className="col-span-full text-center text-[#4E1414]/50 font-semibold py-20">No staff members found.</p>
-                                )}
-                                {staff.map(s => (
-                                    <div key={s.id} className="bg-white p-6 rounded-2xl shadow-sm border border-[#C9974A]/20 flex flex-col justify-between min-h-[140px] hover:border-[#C9974A]/50 transition-colors">
-                                        <div className="flex gap-4 items-center">
-                                            <div className="w-12 h-12 bg-[#4E1414] text-[#F6EEDF] rounded-xl flex items-center justify-center font-black text-lg">
-                                                {s.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-[#241B15]">{s.name}</h4>
-                                                <span className="text-xs font-bold text-[#C9974A] uppercase tracking-wider">{s.roles?.name}</span>
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-[#241B15]/40 font-medium mt-4">{s.phone ?? 'No phone listed'}</p>
-                                    </div>
-                                ))}
+                            <motion.div key="roles" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminRoles roles={roles} staff={staff} permissions={permissions} onRolesUpdated={fetchData} />
                             </motion.div>
                         )}
 
@@ -297,39 +340,17 @@ export function AdminDash() {
                             </motion.div>
                         )}
 
-                        {activeTab === 'Settings' && (
-                            <motion.div key="sets" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-6 max-w-2xl">
-                                <div className="bg-white rounded-2xl shadow-sm border border-[#C9974A]/20 overflow-hidden">
-                                    <div className="bg-[#4E1414] px-6 py-4">
-                                        <h3 className="font-bold text-[#F6EEDF]">Business & GST Details</h3>
-                                        <p className="text-xs text-[#C9974A] mt-0.5">These appear on printed bills and tax documents</p>
-                                    </div>
-                                    <div className="p-6 grid grid-cols-1 gap-5">
-                                        {[
-                                            { label: 'Restaurant Name', defaultVal: 'Hotel Taj Ooty' },
-                                            { label: 'GST Number', defaultVal: '33AACCH4620F1ZX' },
-                                            { label: 'FSSAI License', defaultVal: '12419014000326' },
-                                            { label: 'Address Line 1', defaultVal: '74/75, Collector Rd, Charing Cross' },
-                                            { label: 'City & PIN', defaultVal: 'Ooty, Tamil Nadu – 643001' },
-                                            { label: 'Phone', defaultVal: '+91 99999 00000' },
-                                        ].map(f => (
-                                            <div key={f.label} className="space-y-1.5">
-                                                <label className="text-xs font-bold text-[#4E1414] uppercase tracking-widest">{f.label}</label>
-                                                <input
-                                                    type="text"
-                                                    defaultValue={f.defaultVal}
-                                                    className="w-full border border-[#C9974A]/30 rounded-xl px-4 py-3 font-bold text-[#241B15] bg-[#F6EEDF]/60 focus:outline-none focus:border-[#C9974A] transition-colors"
-                                                />
-                                            </div>
-                                        ))}
-                                        <button className="bg-[#4E1414] text-[#F6EEDF] px-6 py-3 rounded-xl font-bold hover:bg-[#350C0C] transition-colors w-fit border border-[#C9974A]/30">
-                                            Save Changes
-                                        </button>
-                                    </div>
-                                </div>
+                        {activeTab === 'Analytics' && (
+                            <motion.div key="analytics" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminAnalytics menu={menu} orders={orders} />
                             </motion.div>
                         )}
 
+                        {activeTab === 'Settings' && (
+                            <motion.div key="sets" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminSettings />
+                            </motion.div>
+                        )}
                     </AnimatePresence>
                 </div>
             </main>

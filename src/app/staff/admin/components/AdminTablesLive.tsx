@@ -28,20 +28,90 @@ interface EnrichedTable {
     items?: { name: string; qty: number; price: number }[];
 }
 
+import JSZip from 'jszip';
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
-function downloadQR(tableId: string, tableNo: number) {
-    const svg = document.getElementById(`qr-${tableId}`);
+async function svgToPngBlob(svgElement: HTMLElement, tableNo: number): Promise<Blob | null> {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const data = (new XMLSerializer()).serializeToString(svgElement);
+        // Ensure proper dimensions are set on svg string before loading to image
+        const svgBlob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+            canvas.width = 300;
+            canvas.height = 350; // extra space for text
+            if (ctx) {
+                // Background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw QR centered
+                ctx.drawImage(img, 22, 10, 256, 256);
+
+                // Draw Table text
+                ctx.font = "bold 28px sans-serif";
+                ctx.fillStyle = "#350C0C";
+                ctx.textAlign = "center";
+                ctx.fillText(`TABLE ${tableNo}`, canvas.width / 2, 310);
+            }
+            canvas.toBlob((blob) => {
+                URL.revokeObjectURL(url);
+                resolve(blob);
+            }, 'image/png');
+        };
+        img.src = url;
+    });
+}
+
+async function downloadQRPng(tableId: string, tableNo: number) {
+    const svg: any = document.getElementById(`qr-${tableId}`);
     if (!svg) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-    const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+    const blob = await svgToPngBlob(svg, tableNo);
+    if (!blob) return;
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `table-T${tableNo}-qr.svg`;
+    a.download = `table-${tableNo}-qr.png`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+function printQR(tableId: string, tableNo: number) {
+    const svg = document.getElementById(`qr-${tableId}`);
+    if (!svg) return;
+    const data = (new XMLSerializer()).serializeToString(svg);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Print Table ${tableNo}</title>
+                <style>
+                    body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
+                    .container { text-align: center; border: 2px solid #000; padding: 2rem; border-radius: 1rem; }
+                    h1 { margin-top: 1rem; font-size: 3rem; color: #000; }
+                    svg { width: 400px; height: 400px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    ${data}
+                    <h1>TABLE ${tableNo}</h1>
+                </div>
+                <script>
+                    window.onload = () => { window.print(); window.close(); };
+                </script>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
 
 export function AdminTablesLive() {
@@ -134,6 +204,31 @@ export function AdminTablesLive() {
         await loadData();
     };
 
+    const handleDownloadAllQRs = async () => {
+        setCreating(true);
+        const zip = new JSZip();
+        const folder = zip.folder("Table_QRs");
+
+        for (const t of tables) {
+            const svg: any = document.getElementById(`qr-${t.id}`);
+            if (svg) {
+                const blob = await svgToPngBlob(svg, t.table_no);
+                if (blob && folder) {
+                    folder.file(`table-${t.table_no}-qr.png`, blob);
+                }
+            }
+        }
+
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `All_Table_QRs.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setCreating(false);
+    };
+
     if (loading) return (
         <div className="text-center text-[#4E1414] py-20 animate-pulse font-semibold">Loading tables…</div>
     );
@@ -159,15 +254,29 @@ export function AdminTablesLive() {
             </div>
 
             {/* Add table */}
-            <div className="flex justify-end">
-                <button
-                    onClick={handleAddTable}
-                    disabled={creating}
-                    className="flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-5 py-2.5 rounded-xl font-bold shadow hover:bg-[#350C0C] transition-colors disabled:opacity-50"
-                >
-                    <Plus className="w-4 h-4 text-[#C9974A]" />
-                    {creating ? 'Adding…' : 'Add New Table'}
-                </button>
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-[#C9974A]/20 shadow-sm">
+                <div>
+                    <h3 className="text-[#4E1414] font-black text-lg">Table Overview</h3>
+                    <p className="text-[#241B15]/60 text-sm mt-1">Manage physical tables and QR codes.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleDownloadAllQRs}
+                        disabled={creating || tables.length === 0}
+                        className="flex items-center gap-2 bg-[#F6EEDF] border border-[#C9974A]/40 text-[#4E1414] px-4 py-2 rounded-xl font-bold hover:bg-[#e6dbcc] transition-colors disabled:opacity-50"
+                    >
+                        <Download className="w-4 h-4" />
+                        {creating ? 'Zipping...' : 'Bulk Zip QRs'}
+                    </button>
+                    <button
+                        onClick={handleAddTable}
+                        disabled={creating}
+                        className="flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-5 py-2 rounded-xl font-bold shadow hover:bg-[#350C0C] transition-colors disabled:opacity-50"
+                    >
+                        <Plus className="w-4 h-4 text-[#C9974A]" />
+                        Add New Table
+                    </button>
+                </div>
             </div>
 
             {/* Table grid */}
@@ -278,12 +387,20 @@ export function AdminTablesLive() {
                             {BASE_URL}/MenuCard?table={showQR.id}
                         </p>
 
-                        <button
-                            onClick={() => downloadQR(showQR.id, showQR.table_no)}
-                            className="w-full flex items-center justify-center gap-2 bg-[#4E1414] text-[#F6EEDF] py-3.5 rounded-xl font-bold hover:bg-[#350C0C] transition-colors"
-                        >
-                            <Download className="w-4 h-4 text-[#C9974A]" /> Download QR (SVG)
-                        </button>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={() => downloadQRPng(showQR.id, showQR.table_no)}
+                                className="w-full flex items-center justify-center gap-2 bg-[#4E1414] text-[#F6EEDF] py-3.5 rounded-xl font-bold hover:bg-[#350C0C] transition-colors"
+                            >
+                                <Download className="w-4 h-4 text-[#C9974A]" /> Download QR (PNG)
+                            </button>
+                            <button
+                                onClick={() => printQR(showQR.id, showQR.table_no)}
+                                className="w-full flex items-center justify-center gap-2 border-2 border-[#4E1414] text-[#4E1414] bg-white py-3 rounded-xl font-bold hover:bg-[#F6EEDF] transition-colors"
+                            >
+                                Print QR
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -110,7 +110,7 @@ export async function deleteMenuItem(id: string) {
     return { success: true };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export async function addMenuItem(name: string, price: number, category: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let cat: any = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
@@ -171,7 +171,7 @@ export async function fetchActivityLog() {
     const { data, error } = await admin
         .from('staff_activity_log')
         .select('*, staff_users(name, roles(name))')
-        .order('login_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(50);
 
     if (error) return { success: false, error: error.message, data: [] };
@@ -179,24 +179,17 @@ export async function fetchActivityLog() {
 }
 
 export async function logStaffLogin(staffId: string) {
-    await admin.from('staff_activity_log').insert({ staff_id: staffId, login_at: new Date().toISOString() });
+    await admin.from('staff_activity_log').insert({
+        staff_id: staffId,
+        action: 'LOGIN',
+        details: { method: 'password' }
+    });
 }
 
 export async function logStaffLogout(staffId: string) {
-    // Update the most recent open session (no logout_at yet)
-    const { data: session } = await admin
-        .from('staff_activity_log')
-        .select('id')
-        .eq('staff_id', staffId)
-        .is('logout_at', null)
-        .order('login_at', { ascending: false })
-        .limit(1)
-        .single();
-
-    if (session) {
-        await admin
-            .from('staff_activity_log')
-            .update({ logout_at: new Date().toISOString() })
-            .eq('id', session.id);
-    }
+    await admin.from('staff_activity_log').insert({
+        staff_id: staffId,
+        action: 'LOGOUT',
+        details: { trigger: 'user_action' }
+    });
 }
