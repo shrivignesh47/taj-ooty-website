@@ -160,3 +160,29 @@ body {
   transform-origin: center center;
   animation: kenburns 8s ease-out forwards;
 }
+
+/* ─── Admin Dashboard: Taj-themed scrollbar ─────────────────────────────── */
+.taj-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #C9974A #F6EEDF;
+}
+
+.taj-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.taj-scrollbar::-webkit-scrollbar-track {
+  background: #F6EEDF;
+  border-radius: 999px;
+}
+
+.taj-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #C9974A;
+  border-radius: 999px;
+  border: 2px solid #F6EEDF;
+}
+
+.taj-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #4E1414;
+}

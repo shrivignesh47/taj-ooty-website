@@ -1,0 +1,2 @@
+C:\Users\stami\Desktop\hotel_taj_resturant\taj-ooty-website\src\features\ordering\actions\adminActions.ts
+  105:14 @typescript-eslint/no-explicit-any - Unexpected any. Specify a different type.

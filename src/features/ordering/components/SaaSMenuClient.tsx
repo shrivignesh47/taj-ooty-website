@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { MenuCatalog } from '../api/getCatalog';
 import { useCartStore } from '../store/useCartStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ChevronRight, Plus } from 'lucide-react';
 
 export function SaaSMenuClient({ catalog }: { catalog: MenuCatalog }) {

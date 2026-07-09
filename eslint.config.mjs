@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Disable react-compiler rule: project does not use the experimental React Compiler transform
+  {
+    rules: {
+      'react-compiler/react-compiler': 'off',
+    },
+  },
 ]);
 
 export default eslintConfig;
