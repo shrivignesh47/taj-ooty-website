@@ -1,0 +1,400 @@
+illa ipo archtecture design pannalam ena database veikalam ena ena relation backend
+
+Q: Idhu edhukkana project?
+A: taj-ooty-ordering (restaurant's own DB)
+
+
+Orchestrated environment configuration and setup documentation strategy
+Orchestrated environment configuration and setup documentation strategy
+Sari, taj-ooty-ordering ku confirm pannitten. Idha vachu unga .env.local file setup pannunga:
+
+.env.local (project root la create pannunga)
+NEXT_PUBLIC_SUPABASE_URL=https://shgarlpvtvifcjlqlqtw.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNoZ2FybHB2dHZpZmNqbHFscXR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1Nzc3OTEsImV4cCI6MjA5OTE1Mzc5MX0.pYxT0c1jlhrkXiWmEmdY5nu30LgScCDjI-ZNXSn1qWw
+SUPABASE_SERVICE_ROLE_KEY=paste_your_service_role_key_here
+Project URL-a project ID (shgarlpvtvifcjlqlqtw) vachu naan derive pannitten
+Service role key — Supabase dashboard-la Settings → API page-lame irukum, andha "service_role" (secret) label kaanum key-a copy pannitu inga paste pannunga (idha inga chat-la enkitta share pannாதே — neenga direct-a .env.local file-lame paste pannunga)
+Idha .gitignore-la already .env*.local add pannirukom (munnadi README setup panna bothu), so idhு GitHub-ku push aagathu, safe-a irukum
+Ready aana sollunga, appuram namba schema SQL-a Supabase SQL Editor-la run panna guide pannுரேன், appuram Antigravity-ku Supabase client wire-up prompt kudukுரேன்.
+
+ready
+
+
+Orchestrated database migration and client connection setup
+Orchestrated database migration and client connection setup
+Nalla, ippo rendு steps:
+
+Step 1: Schema SQL run pannunga (Supabase dashboard-la)
+Supabase dashboard-la unga taj-ooty-ordering project open pannunga
+Left sidebar-la SQL Editor click pannunga
+New query click pannunga
+Munnadi naan kudutha File 1 SQL (roles, permissions, staff_users, restaurant_tables, categories, menu_items, orders, order_items, order_status_history, bills — full schema + RLS policies) full-a copy pannitu paste pannunga
+Run click pannunga (bottom-right button, or Ctrl+Enter)
+Success message varum — "Success. No rows returned" madhiri. Error vandha, andha error message screenshot pannitu inga podunga
+Verify pannanumna: left sidebar Table Editor ku poi, 11 tables (roles, permissions, role_permissions, staff_users, restaurant_tables, categories, menu_items, orders, order_items, order_status_history, bills) kaanuma nu check pannunga.
+
+Step 2: Antigravity-ku Supabase connect pannura prompt
+Paste this into Antigravity:
+
+Wire up the Supabase connection for the ordering feature module.
+
+Install the Supabase client: npm install @supabase/supabase-js
+Create src/features/ordering/lib/supabase.ts:
+typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Check .env.local');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+Create a server-only client for admin/service-role operations at src/features/ordering/lib/supabaseAdmin.ts (only ever imported in server-side code — API routes or Server Components — never in client components):
+typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+Generate TypeScript types matching the database schema at src/features/ordering/lib/types.ts — types for Role, Permission, StaffUser, RestaurantTable, Category, MenuItem, Order (with the status union type 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'billed'), OrderItem, OrderStatusHistory, and Bill, matching the exact columns from the SQL migration already run in Supabase.
+Write one simple test query in a temporary scratch file (or console log in a page) to confirm the connection works: fetch all rows from categories and log the result — categories table will be empty right now since we haven't seeded menu data yet, so an empty array [] with no error is the expected successful result.
+Confirm .env.local is listed in .gitignore (it already should be) and that SUPABASE_SERVICE_ROLE_KEY is never referenced in any file under src/app/ client components or anywhere that could end up in the browser bundle.
+After this, run npx tsc --noEmit and npx eslint src, confirm both pass clean, then show me the console output confirming the Supabase connection works.
+
+step 1 query again kudu
+
+
+Marshaled schema query retrieval for Kudu database
+Marshaled schema query retrieval for Kudu database
+Idho step 1 SQL — Supabase SQL Editor la full-a copy-paste pannunga:
+
+sql
+-- Roles & permissions (data-driven, supports custom roles)
+create table roles (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  is_custom boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table permissions (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique  -- e.g. 'view_orders', 'edit_menu'
+);
+
+create table role_permissions (
+  role_id uuid references roles(id) on delete cascade,
+  permission_id uuid references permissions(id) on delete cascade,
+  primary key (role_id, permission_id)
+);
+
+-- Staff users (linked to Supabase Auth)
+create table staff_users (
+  id uuid primary key default gen_random_uuid(),
+  auth_id uuid references auth.users(id) on delete set null,
+  name text not null,
+  phone text,
+  role_id uuid references roles(id),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- Tables + QR mapping
+create table restaurant_tables (
+  id uuid primary key default gen_random_uuid(),
+  table_no int not null unique,
+  qr_code_url text,
+  assigned_waiter_id uuid references staff_users(id)
+);
+
+-- Menu
+create table categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  sort_order int not null default 0
+);
+
+create table menu_items (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid references categories(id) on delete cascade,
+  name text not null,
+  price numeric(10,2) not null,
+  image_url text,
+  is_available boolean not null default true
+);
+
+-- Orders
+create table orders (
+  id uuid primary key default gen_random_uuid(),
+  table_id uuid references restaurant_tables(id),
+  customer_name text not null,
+  customer_phone text not null,
+  status text not null default 'pending'
+    check (status in ('pending','confirmed','preparing','ready','served','billed')),
+  waiter_id uuid references staff_users(id),
+  created_at timestamptz not null default now()
+);
+
+create table order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references orders(id) on delete cascade,
+  menu_item_id uuid references menu_items(id),
+  qty int not null check (qty > 0),
+  notes text,
+  price_at_order numeric(10,2) not null  -- snapshot price, protects against later price changes
+);
+
+create table order_status_history (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references orders(id) on delete cascade,
+  status text not null,
+  changed_by uuid references staff_users(id),
+  changed_at timestamptz not null default now()
+);
+
+create table bills (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid references orders(id) unique,
+  total numeric(10,2) not null,
+  cashier_id uuid references staff_users(id),
+  paid_at timestamptz
+);
+
+-- Seed base roles + permissions
+insert into roles (name, is_custom) values
+  ('admin', false), ('waiter', false), ('kitchen', false), ('cashier', false);
+
+insert into permissions (key) values
+  ('view_orders'),('edit_orders'),('confirm_orders'),('view_kitchen_queue'),
+  ('update_prep_status'),('view_billing'),('generate_bills'),('edit_menu'),
+  ('manage_staff'),('manage_roles'),('view_revenue'),('export_data'),('manage_tables');
+
+-- Wire up default role permissions (adjust as needed)
+insert into role_permissions (role_id, permission_id)
+select r.id, p.id from roles r, permissions p
+where r.name = 'admin'; -- admin gets everything
+
+insert into role_permissions (role_id, permission_id)
+select r.id, p.id from roles r, permissions p
+where r.name = 'waiter' and p.key in ('view_orders','edit_orders','confirm_orders');
+
+insert into role_permissions (role_id, permission_id)
+select r.id, p.id from roles r, permissions p
+where r.name = 'kitchen' and p.key in ('view_kitchen_queue','update_prep_status');
+
+insert into role_permissions (role_id, permission_id)
+select r.id, p.id from roles r, permissions p
+where r.name = 'cashier' and p.key in ('view_billing','generate_bills');
+
+-- Enable RLS on every table
+alter table roles enable row level security;
+alter table permissions enable row level security;
+alter table role_permissions enable row level security;
+alter table staff_users enable row level security;
+alter table restaurant_tables enable row level security;
+alter table categories enable row level security;
+alter table menu_items enable row level security;
+alter table orders enable row level security;
+alter table order_items enable row level security;
+alter table order_status_history enable row level security;
+alter table bills enable row level security;
+
+-- Public read access for menu (customers browsing don't log in)
+create policy "public can view categories" on categories for select using (true);
+create policy "public can view available menu items" on menu_items for select using (is_available = true);
+
+-- Public (anonymous) customers can create orders, but not edit/delete them
+create policy "public can create orders" on orders for insert with check (true);
+create policy "public can view own order by id" on orders for select using (true);
+create policy "public can add order items on creation" on order_items for insert with check (true);
+create policy "public can view order items" on order_items for select using (true);
+
+-- Staff policies: helper function checking role_permissions via the authenticated user's staff_users row
+create or replace function has_permission(perm_key text)
+returns boolean language sql security definer as $$
+  select exists (
+    select 1 from staff_users su
+    join role_permissions rp on rp.role_id = su.role_id
+    join permissions p on p.id = rp.permission_id
+    where su.auth_id = auth.uid() and p.key = perm_key and su.is_active = true
+  );
+$$;
+
+create policy "staff with edit_orders can update orders" on orders
+  for update using (has_permission('edit_orders') or has_permission('confirm_orders'));
+
+create policy "staff with view_orders can view all orders" on orders
+  for select using (has_permission('view_orders'));
+
+create policy "staff with edit_menu can manage menu" on menu_items
+  for all using (has_permission('edit_menu'));
+
+create policy "staff with manage_staff can manage staff" on staff_users
+  for all using (has_permission('manage_staff'));
+
+create policy "staff with manage_roles can manage roles" on roles
+  for all using (has_permission('manage_roles'));
+
+create policy "staff with generate_bills can manage bills" on bills
+  for all using (has_permission('generate_bills') or has_permission('view_billing'));
+Idha Supabase → SQL Editor → New query → paste → Run. Success aana, Table Editor-la 11 tables kaana vendum.
+
+Success. No rows returned
+
+Semma — schema ready! Table Editor-la 11 tables kaanuma nu verify pannunga:
+
+✅ roles
+✅ permissions
+✅ role_permissions
+✅ staff_users
+✅ restaurant_tables
+✅ categories
+✅ menu_items
+✅ orders
+✅ order_items
+✅ order_status_history
+✅ bills
+
+Ellam irukkumna, ippo Antigravity-ku Step 2 prompt kudukuradhu — Supabase client wire-up + TypeScript types. Andha prompt already munnadi kudutten, idho again ready-to-paste version:
+
+Paste this into Antigravity:
+
+Supabase schema is ready (taj-ooty-ordering project, Singapore region). Now wire up the connection:
+
+1. Run: npm install @supabase/supabase-js
+
+2. Create src/features/ordering/lib/supabase.ts:
+
+typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Check .env.local');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+3. Create src/features/ordering/lib/supabaseAdmin.ts (server-side only, never import in client components):
+
+typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+4. Create src/features/ordering/lib/types.ts with these exact types matching the schema:
+
+typescript
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'billed';
+
+export interface Role {
+  id: string;
+  name: string;
+  is_custom: boolean;
+  created_at: string;
+}
+
+export interface Permission {
+  id: string;
+  key: string;
+}
+
+export interface RolePermission {
+  role_id: string;
+  permission_id: string;
+}
+
+export interface StaffUser {
+  id: string;
+  auth_id: string | null;
+  name: string;
+  phone: string | null;
+  role_id: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface RestaurantTable {
+  id: string;
+  table_no: number;
+  qr_code_url: string | null;
+  assigned_waiter_id: string | null;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface MenuItem {
+  id: string;
+  category_id: string;
+  name: string;
+  price: number;
+  image_url: string | null;
+  is_available: boolean;
+}
+
+export interface Order {
+  id: string;
+  table_id: string;
+  customer_name: string;
+  customer_phone: string;
+  status: OrderStatus;
+  waiter_id: string | null;
+  created_at: string;
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  menu_item_id: string;
+  qty: number;
+  notes: string | null;
+  price_at_order: number;
+}
+
+export interface OrderStatusHistory {
+  id: string;
+  order_id: string;
+  status: string;
+  changed_by: string | null;
+  changed_at: string;
+}
+
+export interface Bill {
+  id: string;
+  order_id: string;
+  total: number;
+  cashier_id: string | null;
+  paid_at: string | null;
+}
+5. Create src/features/ordering/index.ts:
+
+typescript
+export { supabase } from './lib/supabase';
+export * from './lib/types';
+6. In any temporary page or component, add this quick connection test and show me the console output:
+
+typescript
+import { supabase } from '@/features/ordering/lib/supabase';
+
+const { data, error } = await supabase.from('categories').select('*');
+console.log('Supabase connection test:', { data, error });
+// Expected: { data: [], error: null } — empty array since no menu data seeded yet
+7. Verify SUPABASE_SERVICE_ROLE_KEY is never referenced in any client component file — only in files that are server-side only (API routes or files with 'use server' directive).
+
+After all this, run npx tsc --noEmit and npx eslint src, confirm both pass clean, and show me the console output of the connection test.
+
+Table Editor-la 11 tables kaandheengala nu confirm pannunga!

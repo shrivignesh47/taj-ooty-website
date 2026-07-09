@@ -43,7 +43,13 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
 
     // Popover & Badge State
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-    const [showBadge, setShowBadge] = useState(false);
+    const [showBadge, setShowBadge] = useState(() => {
+        if (typeof window !== "undefined") {
+            const wasClicked = sessionStorage.getItem('weatherPillClicked');
+            return !wasClicked;
+        }
+        return false;
+    });
     const containerRef = useRef<HTMLDivElement>(null);
 
     const prefersReduced = useReducedMotion();
@@ -109,12 +115,6 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         if (!weather || error || typeof window === 'undefined') return;
 
         const autoShown = sessionStorage.getItem('weatherSuggestionAutoShown');
-        const wasClicked = sessionStorage.getItem('weatherPillClicked');
-
-        // Show badge if it hasn't been manually clicked yet
-        if (!wasClicked) {
-            setShowBadge(true);
-        }
 
         // Auto-play the popover once per session
         if (!autoShown && !prefersReduced) {
