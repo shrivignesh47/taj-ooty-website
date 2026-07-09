@@ -29,32 +29,17 @@ const mapWmoCode = (code: number): WeatherCondition => {
 
 export default function WeatherWidget({ compact = false }: { compact?: boolean }) {
     const [weather, setWeather] = useState<WeatherData | null>(null);
-    const [timeStr, setTimeStr] = useState(() => {
-        if (typeof window !== "undefined") {
-            return new Date().toLocaleTimeString("en-US", {
-                timeZone: "Asia/Kolkata",
-                hour: "numeric",
-                minute: "2-digit"
-            });
-        }
-        return "";
-    });
+    const [timeStr, setTimeStr] = useState("");
     const [error, setError] = useState(false);
 
     // Popover & Badge State
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-    const [showBadge, setShowBadge] = useState(() => {
-        if (typeof window !== "undefined") {
-            const wasClicked = sessionStorage.getItem('weatherPillClicked');
-            return !wasClicked;
-        }
-        return false;
-    });
+    const [showBadge, setShowBadge] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const prefersReduced = useReducedMotion();
 
-    // Time ticker
+    // Time ticker and hydration fix
     useEffect(() => {
         const formatTime = () => {
             return new Date().toLocaleTimeString("en-US", {
@@ -63,6 +48,12 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
                 minute: "2-digit"
             });
         };
+
+        // Hydrate
+        setTimeStr(formatTime());
+        const wasClicked = sessionStorage.getItem('weatherPillClicked');
+        if (!wasClicked) setShowBadge(true);
+
         const timeInterval = setInterval(() => {
             setTimeStr(formatTime());
         }, 1000);

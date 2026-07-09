@@ -116,18 +116,29 @@ export function AdminDash() {
     const handleFileUpload = (e: any) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // Reset the input value so the same file triggers onChange again
+        e.target.value = null;
+
         const reader = new FileReader();
         reader.onload = async (evt) => {
             const wb = XLSX.read(evt.target?.result, { type: 'binary' });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const data = XLSX.utils.sheet_to_json(ws);
 
-            // Build bulk array payload
-            const payload = data.map((d: any) => ({
-                name: d.Name || d.name || 'Imported Item',
-                price: parseFloat(d.Price || d.price || '0'),
-                category: d.Category || d.category || 'Special Imports'
-            }));
+            // Build bulk array payload dynamically matching different header styles
+            const payload = data.map((d: any) => {
+                const norm = Object.keys(d).reduce((acc, key) => {
+                    acc[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = d[key];
+                    return acc;
+                }, {} as any);
+
+                return {
+                    name: norm.name || norm.itemname || norm.title || norm.item || 'Imported Item',
+                    price: parseFloat(norm.price || norm.cost || norm.rate || '0'),
+                    category: norm.category || norm.type || norm.group || 'General'
+                };
+            });
 
             // Force visual sync before server request finishes
             setMenu(prev => [
@@ -197,11 +208,11 @@ export function AdminDash() {
             </aside>
 
             {/* ── Main ── */}
-            <main className="flex-1 overflow-y-auto bg-[#F6EEDF]/50 taj-scrollbar">
+            <main className="flex-1 overflow-y-auto bg-[#F6EEDF] taj-scrollbar">
                 {/* Header */}
-                <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-[#C9974A]/20 px-8 py-4 flex justify-between items-center shadow-sm">
+                <header className="sticky top-0 z-40 bg-[#350C0C] border-b border-[#C9974A]/20 px-8 py-4 flex justify-between items-center shadow-md">
                     <div>
-                        <h2 className="text-xl font-black text-[#4E1414] tracking-tight">
+                        <h2 className="text-xl font-black text-[#F6EEDF] tracking-tight">
                             {NAV_TABS.find(t => t.id === activeTab)?.label ?? activeTab}
                         </h2>
                         <p className="text-[#C9974A] text-xs font-semibold tracking-wide">Hotel Taj Ooty</p>

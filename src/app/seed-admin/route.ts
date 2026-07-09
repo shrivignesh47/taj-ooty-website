@@ -6,38 +6,51 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-        const adminEmail = 'admin@tajooty.com';
+        const adminEmail = 'admin@taj.com';
+        const password = 'password123';
 
-        // 1. Get existing auth ID
-        const { data: users, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
-        if (authErr) throw new Error(authErr.message);
+        // 1. Get or Create Auth User
+        const { data: users, error: authListErr } = await supabaseAdmin.auth.admin.listUsers();
+        if (authListErr) throw new Error(authListErr.message);
 
+        let authId = '';
         const adminAuthUser = users.users.find(u => u.email === adminEmail);
-        if (!adminAuthUser) {
-            return NextResponse.json({ error: 'Auth user not found.' });
+
+        if (adminAuthUser) {
+            authId = adminAuthUser.id;
+            await supabaseAdmin.auth.admin.updateUserById(authId, { password, email_confirm: true });
+        } else {
+            const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+                email: adminEmail,
+                password: password,
+                email_confirm: true,
+            });
+            if (createErr) throw createErr;
+            authId = newUser.user.id;
         }
 
-        const authId = adminAuthUser.id;
-
-        // 2. Fetch the "admin" role ID from staff_roles
-        const { data: roles } = await supabaseAdmin
-            .from('staff_roles')
+        // 2. Fetch or Create Admin Role
+        let roleId = '';
+        const { data: roles, error: rolesErr } = await supabaseAdmin
+            .from('roles')
             .select('id')
-            .eq('role_name', 'admin')
+            .eq('name', 'admin')
             .single();
 
-        let roleId = roles?.id;
-
-        if (!roleId) {
-            const { data: newRole } = await supabaseAdmin
-                .from('staff_roles')
-                .insert([{ role_name: 'admin', permissions: { all: true } }])
+        if (roles) {
+            roleId = roles.id;
+        } else {
+            const { data: newRole, error: roleInsErr } = await supabaseAdmin
+                .from('roles')
+                .insert([{ name: 'admin' }])
                 .select()
                 .single();
-            roleId = newRole?.id;
+
+            if (roleInsErr) throw new Error(`Role init failed: ${roleInsErr.message}`);
+            roleId = newRole.id;
         }
 
-        // 3. Upsert into staff_users (by matching auth_id if possible, or just insert)
+        // 3. Upsert into staff_users
         const { data: existingStaff } = await supabaseAdmin
             .from('staff_users')
             .select('id')
@@ -45,10 +58,11 @@ export async function GET() {
             .single();
 
         if (existingStaff) {
-            await supabaseAdmin
+            const { error: staffUpdErr } = await supabaseAdmin
                 .from('staff_users')
                 .update({ role_id: roleId, is_active: true })
                 .eq('id', existingStaff.id);
+            if (staffUpdErr) throw new Error(`Staff update failed: ${staffUpdErr.message}`);
         } else {
             const { error: staffErr } = await supabaseAdmin
                 .from('staff_users')
@@ -62,7 +76,13 @@ export async function GET() {
             if (staffErr) throw new Error(`Staff mapping failed: ${staffErr.message}`);
         }
 
-        return NextResponse.json({ success: true, message: 'Admin rigorously fixed in staff_users' });
+        return NextResponse.json({
+            success: true,
+            message: 'Local Admin successfully provisioned! Table links established.',
+            email: adminEmail,
+            password: password,
+            roleId: roleId
+        });
 
     } catch (e: any) {
         return NextResponse.json({ error: e.message }, { status: 500 });

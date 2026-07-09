@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 "use server";
 
 import { createSupabaseServerClient } from '../lib/supabaseServer';
 import { redirect } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
 export async function loginStaff(formData: FormData) {
     const email = formData.get('email') as string;
@@ -24,7 +25,6 @@ export async function loginStaff(formData: FormData) {
     }
 
     // Role-based routing directly post-login to skip the dashboard hub for specific roles
-    const { createClient } = require('@supabase/supabase-js');
     const supabaseAdminEdge = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!

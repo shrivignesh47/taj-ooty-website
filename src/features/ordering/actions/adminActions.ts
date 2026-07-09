@@ -91,6 +91,15 @@ export async function updateMenuItem(id: string, name: string, price: number, ca
     return { success: true };
 }
 
+export async function updateMenuItemAvailability(id: string, is_available: boolean) {
+    const { error } = await admin.from('menu_items')
+        .update({ is_available })
+        .eq('id', id);
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/staff/admin');
+    return { success: true };
+}
+
 export async function deleteMenuItem(id: string) {
     // Manually cascade delete order_items referencing this item
     await admin.from('order_items').delete().eq('menu_item_id', id);
@@ -101,12 +110,14 @@ export async function deleteMenuItem(id: string) {
     return { success: true };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addMenuItem(name: string, price: number, category: string) {
-    let cat = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let cat: any = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
     if (!cat) {
         const { data: maxSort } = await admin.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
         const nextOrder = (maxSort?.sort_order ?? 0) + 1;
-        cat = (await admin.from('categories').insert({ name: category, sort_order: nextOrder }).select('id').single()).data;
+        cat = (await admin.from('categories').insert({ name: category, sort_order: nextOrder }).select('id, sort_order').single()).data;
     }
     const { error } = await admin.from('menu_items').insert({
         name,
