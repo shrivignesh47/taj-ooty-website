@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { supabase } from '../lib/supabase';
 import { Category, MenuItem } from '../lib/types';
 
 export interface MenuCatalog {
@@ -7,9 +7,7 @@ export interface MenuCatalog {
 }
 
 export async function getLiveCatalog(): Promise<MenuCatalog> {
-    // Using supabaseAdmin to fetch publicly available catalog bypassing RLS token issues
-
-    const { data: categories, error: catError } = await supabaseAdmin
+    const { data: categories, error: catError } = await supabase
         .from('categories')
         .select('*')
         .order('sort_order', { ascending: true });
@@ -19,7 +17,7 @@ export async function getLiveCatalog(): Promise<MenuCatalog> {
         return { categories: [], menuItems: [] };
     }
 
-    const { data: menuItems, error: itemsError } = await supabaseAdmin
+    const { data: menuItems, error: itemsError } = await supabase
         .from('menu_items')
         .select('*')
         .eq('is_available', true);

@@ -3,8 +3,7 @@
 import { createSupabaseServerClient } from '../lib/supabaseServer';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 
-export async function advanceOrderStatus(orderId: string, newStatus: string) {
-    // 1. Authenticate Request
+async function requireStaffIdentity() {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -12,7 +11,6 @@ export async function advanceOrderStatus(orderId: string, newStatus: string) {
         return { error: 'Unauthorized. Staff session required to mutate order status.' };
     }
 
-    // 2. Fetch staff member ID to log the audit history correctly
     const { data: staff, error: authErr } = await supabaseAdmin
         .from('staff_users')
         .select('id, role_id')
@@ -23,7 +21,29 @@ export async function advanceOrderStatus(orderId: string, newStatus: string) {
         return { error: 'Staff profile mapping failed' };
     }
 
-    // 3. Atomically update the order and log history
+    return { staff };
+}
+
+async function logOrderStatus(orderId: string, status: string, changedBy: string) {
+    const { error } = await supabaseAdmin
+        .from('order_status_history')
+        .insert([{
+            order_id: orderId,
+            status,
+            changed_by: changedBy
+        }]);
+
+    if (error) {
+        console.error('Failed to log order history', error);
+    }
+}
+
+export async function advanceOrderStatus(orderId: string, newStatus: string) {
+    const identity = await requireStaffIdentity();
+    if ('error' in identity) {
+        return identity;
+    }
+
     const { error: updateErr } = await supabaseAdmin
         .from('orders')
         .update({ status: newStatus })
@@ -33,17 +53,88 @@ export async function advanceOrderStatus(orderId: string, newStatus: string) {
         return { error: `Order transition failed: ${updateErr.message}` };
     }
 
-    const { error: auditErr } = await supabaseAdmin
-        .from('order_status_history')
-        .insert([{
-            order_id: orderId,
-            status: newStatus,
-            changed_by: staff.id
-        }]);
+    await logOrderStatus(orderId, newStatus, identity.staff.id);
 
-    if (auditErr) {
-        console.error("Failed to log order history", auditErr);
+    return { success: true };
+}
+
+export async function updateKitchenItemStatus(
+    orderId: string,
+    orderItemId: string,
+    nextStatus: 'pending' | 'ready'
+) {
+    const identity = await requireStaffIdentity();
+    if ('error' in identity) {
+        return identity;
     }
 
+    const { error } = await supabaseAdmin
+        .from('order_items')
+        .update({ status: nextStatus })
+        .eq('id', orderItemId)
+        .eq('order_id', orderId);
+
+    if (error) {
+        return { error: `Failed to update item status: ${error.message}` };
+    }
+
+    return { success: true };
+}
+
+export async function startKitchenOrder(orderId: string) {
+    const identity = await requireStaffIdentity();
+    if ('error' in identity) {
+        return identity;
+    }
+
+    const { error } = await supabaseAdmin
+        .from('orders')
+        .update({ status: 'preparing' })
+        .eq('id', orderId);
+
+    if (error) {
+        return { error: `Failed to start preparation: ${error.message}` };
+    }
+
+    const { error: itemsError } = await supabaseAdmin
+        .from('order_items')
+        .update({ status: 'pending' })
+        .eq('order_id', orderId)
+        .is('status', null);
+
+    if (itemsError) {
+        console.error('Failed to normalize order item statuses', itemsError);
+    }
+
+    await logOrderStatus(orderId, 'preparing', identity.staff.id);
+    return { success: true };
+}
+
+export async function markKitchenOrderReady(orderId: string) {
+    const identity = await requireStaffIdentity();
+    if ('error' in identity) {
+        return identity;
+    }
+
+    const { error: itemsError } = await supabaseAdmin
+        .from('order_items')
+        .update({ status: 'ready' })
+        .eq('order_id', orderId)
+        .neq('status', 'cancelled');
+
+    if (itemsError) {
+        return { error: `Failed to update KOT items: ${itemsError.message}` };
+    }
+
+    const { error: orderError } = await supabaseAdmin
+        .from('orders')
+        .update({ status: 'ready' })
+        .eq('id', orderId);
+
+    if (orderError) {
+        return { error: `Failed to mark order ready: ${orderError.message}` };
+    }
+
+    await logOrderStatus(orderId, 'ready', identity.staff.id);
     return { success: true };
 }

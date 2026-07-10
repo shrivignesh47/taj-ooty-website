@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+import { verifyStaff } from './auth';
 
 const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -192,4 +193,75 @@ export async function logStaffLogout(staffId: string) {
         action: 'LOGOUT',
         details: { trigger: 'user_action' }
     });
+}
+
+// ─── Restaurant Settings ─────────────────────────────────────────────────────
+
+export async function fetchRestaurantSettings() {
+    const auth = await verifyStaff();
+    if (!auth.success) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const { data, error } = await admin
+        .from('restaurant_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+}
+
+export async function saveRestaurantSettings(payload: {
+    restaurant_name: string;
+    gst_number: string;
+    fssai_number: string;
+    service_charge_percent: number;
+    phone: string;
+    email: string;
+    address: string;
+    auto_print_on_accept: boolean;
+    printer_name: string;
+    print_kot: boolean;
+    print_bill: boolean;
+}) {
+    const auth = await verifyStaff();
+    if (!auth.success || !auth.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const canManageSettings =
+        auth.user.roleName?.toLowerCase() === 'admin' ||
+        auth.user.permissions.includes('manage_staff');
+
+    if (!canManageSettings) {
+        return { success: false, error: 'You do not have permission to update settings.' };
+    }
+
+    const { data: existing, error: readError } = await admin
+        .from('restaurant_settings')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+    if (readError) {
+        return { success: false, error: readError.message };
+    }
+
+    const query = existing
+        ? admin.from('restaurant_settings').update(payload).eq('id', existing.id)
+        : admin.from('restaurant_settings').insert(payload);
+
+    const { error } = await query;
+
+    if (error) {
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/staff/admin');
+    return { success: true };
 }

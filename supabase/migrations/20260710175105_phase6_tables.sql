@@ -37,3 +37,13 @@ CREATE POLICY "admin can manage settings" ON restaurant_settings
 INSERT INTO restaurant_settings (restaurant_name)
 SELECT 'Hotel Taj Ooty'
 WHERE NOT EXISTS (SELECT 1 FROM restaurant_settings);
+
+-- Apply select policy on restaurant_tables to make it visible to clients
+CREATE POLICY "public can view tables" ON "public"."restaurant_tables" FOR SELECT USING (true);
+CREATE POLICY "staff can manage tables" ON "public"."restaurant_tables" FOR ALL USING (has_permission('manage_tables'));
+
+-- Add tables to the supabase_realtime publication to enable WebSocket broadcast of updates
+ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
+ALTER PUBLICATION supabase_realtime ADD TABLE restaurant_tables;
+

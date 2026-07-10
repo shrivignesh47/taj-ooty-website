@@ -1,106 +1,165 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MenuCatalog } from '../api/getCatalog';
 import { useCartStore } from '../store/useCartStore';
-import { motion } from 'framer-motion';
-import { ChevronRight, Plus } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Minus, Search, ShoppingBag, X, Loader2 } from 'lucide-react';
+import { CustomerOrderStatus } from './CustomerOrderStatus';
+import { supabase } from '../lib/supabase';
 
-export function SaaSMenuClient({ catalog }: { catalog: MenuCatalog }) {
+export function SaaSMenuClient({ catalog, initialTableNo }: { catalog: MenuCatalog, initialTableNo?: number }) {
     const customer = useCartStore((state) => state.customer);
     const setCustomer = useCartStore((state) => state.setCustomer);
+    const setActiveOrder = useCartStore((state) => state.setActiveOrder);
+    const isOnboarded = useCartStore((state) => state.isOnboarded);
+    const setOnboarded = useCartStore((state) => state.setOnboarded);
 
-    // Local state for the onboarding form
-    const [formData, setFormData] = useState({ name: '', phone: '', table_no: '' });
-
-    // Hydration safety check for Zustand persist
     const [mounted, setMounted] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeCategory, setActiveCategory] = useState(catalog.categories[0]?.id || '');
+    const navRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // eslint-disable-next-line
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMounted(true);
     }, []);
 
-    if (!mounted) return null; // Avoid hydration mismatch on initial render
-
-    // 1. Unauthenticated Gate (No Customer Session)
-    if (!customer) {
-        return (
-            <div className="flex min-h-screen items-center justify-center p-6 relative overflow-hidden bg-[#241B15]">
-                {/* Abstract animated backgrounds mapping prestige */}
-                <div className="absolute inset-0 z-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#C9974A] via-[#350C0C] to-[#241B15]" />
-
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                    className="relative z-10 w-full max-w-md bg-[#F6EEDF] p-8 md:p-10 rounded-2xl shadow-2xl overflow-hidden"
-                >
-                    <h1 className="text-3xl font-bold text-[#4E1414] mb-2 font-display">Welcome.</h1>
-                    <p className="text-sm text-[#241B15]/70 mb-8 border-b border-[#C9974A]/20 pb-4">Please enter your details to access the smart menu and begin your dining experience.</p>
-
-                    <form
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            setCustomer({
-                                name: formData.name,
-                                phone: formData.phone,
-                                table_no: parseInt(formData.table_no)
-                            });
-                        }}
-                        className="space-y-5"
-                    >
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase tracking-wider text-[#4E1414]">Name</label>
-                            <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-4 py-3 text-[#241B15] focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 transition-all" placeholder="Enter your full name" />
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase tracking-wider text-[#4E1414]">Phone Number</label>
-                            <input required type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-4 py-3 text-[#241B15] focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 transition-all" placeholder="e.g. +91 9876543210" />
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase tracking-wider text-[#4E1414]">Table Number</label>
-                            <input required type="number" min="1" value={formData.table_no} onChange={(e) => setFormData({ ...formData, table_no: e.target.value })} className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-4 py-3 text-[#241B15] focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 transition-all" placeholder="Check your table block" />
-                        </div>
-
-                        <button type="submit" className="w-full bg-[#4E1414] hover:bg-[#350C0C] text-[#F6EEDF] font-semibold py-3.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-transform active:scale-[0.98] mt-4 shadow-lg shadow-[#4E1414]/20">
-                            Proceed to Menu
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
-                    </form>
-                </motion.div>
-            </div>
+    // IntersectionObserver logic for category pills
+    useEffect(() => {
+        if (!mounted || !isOnboarded || searchQuery.trim() !== '') return;
+        
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        const id = entry.target.id.replace('category-', '');
+                        setActiveCategory(id);
+                        const pill = document.getElementById(`pill-${id}`);
+                        if (pill && navRef.current) {
+                            pill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                        }
+                    }
+                });
+            },
+            { rootMargin: '-180px 0px -50% 0px', threshold: 0.1 }
         );
+
+        catalog.categories.forEach(cat => {
+            const el = document.getElementById(`category-${cat.id}`);
+            if (el) observer.observe(el);
+        });
+
+        return () => observer.disconnect();
+    }, [mounted, isOnboarded, catalog.categories, searchQuery]);
+
+    const scrollToCategory = (id: string) => {
+        setActiveCategory(id);
+        const el = document.getElementById(`category-${id}`);
+        if (el) {
+            const y = el.getBoundingClientRect().top + window.scrollY - 160;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+    };
+
+    if (!mounted) return null;
+
+    // 1. Active Order Tracker
+    if (customer?.active_order_id) {
+        return <CustomerOrderStatus orderId={customer.active_order_id} />;
     }
 
-    // 2. Authenticated Catalog View
+    // 2. Onboarding Screen
+    if (!isOnboarded) {
+        return <OnboardingScreen initialTableNo={initialTableNo} setCustomer={setCustomer} setOnboarded={setOnboarded} />;
+    }
+
+    // 3. Menu Filtering
+    const filteredCategories = catalog.categories.filter(cat => {
+        const hasItems = catalog.menuItems.some(i => i.category_id === cat.id && i.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        return hasItems;
+    });
+
     return (
-        <div className="pb-32 bg-[#F6EEDF] min-h-screen">
-            {/* Top Nav Block */}
-            <header className="sticky top-0 z-40 bg-[#F6EEDF]/90 backdrop-blur-md border-b border-[#C9974A]/20 px-6 py-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-xl font-display font-bold text-[#4E1414]">Dining Menu</h1>
-                    <p className="text-xs text-[#241B15]/60 font-medium">Table {customer.table_no} • {customer.name}</p>
+        <div className="max-w-[430px] mx-auto min-h-screen bg-[#F6EEDF] relative shadow-2xl pb-32">
+            {/* Header */}
+            <header className="sticky top-0 z-30 bg-[#F6EEDF] border-b border-[#C9974A]/10 shadow-sm flex flex-col">
+                <div className="px-5 py-4 flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-full bg-white border border-[#C9974A]/30 overflow-hidden flex items-center justify-center shrink-0">
+                        <span className="font-bold text-[#4E1414] text-xs">TAJ</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                        <h1 className="text-xl font-display font-bold text-[#4E1414] leading-tight">Menu</h1>
+                        <p className="text-[10px] text-[#C9974A] font-bold uppercase tracking-wider">Hi, {customer?.name}!</p>
+                    </div>
+                    <div className="w-8 h-8 relative flex items-center justify-center shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-[#241B15]" />
+                        <CartBadge />
+                    </div>
+                </div>
+
+                <div className="px-5 pb-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#241B15]/40" />
+                        <input
+                            type="text"
+                            placeholder="Search dishes..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#C9974A]/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C9974A] transition-shadow shadow-sm"
+                        />
+                    </div>
+                    <div className="mt-3 flex items-center justify-center">
+                        <span className="bg-[#4E1414]/10 text-[#4E1414] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full">
+                            Table {customer?.table_no}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Horizontal Category Nav */}
+                <div ref={navRef} className="flex overflow-x-auto hide-scrollbar px-5 pb-3 gap-2">
+                    {filteredCategories.map(cat => (
+                        <button
+                            key={cat.id}
+                            id={`pill-${cat.id}`}
+                            onClick={() => scrollToCategory(cat.id)}
+                            className={`whitespace-nowrap px-4 py-2 min-h-[36px] rounded-full text-sm font-semibold transition-colors
+                                ${activeCategory === cat.id ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-transparent border border-[#241B15] text-[#241B15]'}`}
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
                 </div>
             </header>
 
             {/* Catalog Mapping */}
-            <div className="max-w-3xl mx-auto p-6 space-y-12">
-                {catalog.categories.map((category) => {
-                    const catItems = catalog.menuItems.filter(i => i.category_id === category.id);
-                    if (catItems.length === 0) return null; // hide empty categories
+            <div className="p-0">
+                {filteredCategories.length === 0 && (
+                    <div className="flex flex-col items-center justify-center pt-20 px-6 text-center">
+                        <Search className="w-12 h-12 text-[#C9974A]/40 mb-4" />
+                        <p className="text-[#241B15]/70 font-medium">No items found for &quot;{searchQuery}&quot;</p>
+                    </div>
+                )}
+                
+                {filteredCategories.map((category) => {
+                    const catItems = catalog.menuItems.filter(i => 
+                        i.category_id === category.id && 
+                        i.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
 
                     return (
-                        <section key={category.id} className="scroll-mt-24">
-                            <h2 className="text-2xl font-display font-bold text-[#350C0C] mb-6 flex items-center gap-4">
-                                {category.name}
-                                <div className="h-[1px] flex-grow bg-[#C9974A]/30"></div>
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <section key={category.id} id={`category-${category.id}`} className="scroll-mt-44">
+                            {/* Sticky Subheader */}
+                            <div className="sticky top-[168px] z-20 bg-[#F6EEDF]/95 backdrop-blur-sm px-5 py-2 border-b border-[#C9974A]/10">
+                                <h2 className="text-lg font-display font-bold text-[#350C0C]">
+                                    {category.name}
+                                </h2>
+                            </div>
+                            
+                            {/* Single Column List */}
+                            <div className="flex flex-col px-5">
                                 {catItems.map((item) => (
-                                    <MenuItemCard key={item.id} item={item} />
+                                    <CompactMobileItemRow key={item.id} item={item} />
                                 ))}
                             </div>
                         </section>
@@ -108,60 +167,247 @@ export function SaaSMenuClient({ catalog }: { catalog: MenuCatalog }) {
                 })}
             </div>
 
-            {/* Floating Cart Indicator */}
-            <CartIndicator />
+            {/* Simplified Cart Drawer Manager */}
+            <CartDrawerManager setActiveOrder={setActiveOrder} customer={customer} />
         </div>
     );
 }
 
-// Internal reusable component for the generic item card
-function MenuItemCard({ item }: { item: import('../lib/types').MenuItem }) {
-    const addItem = useCartStore((state) => state.addItem);
+// -------------------------------------------------------------
+// Onboarding Screen
+// -------------------------------------------------------------
+function OnboardingScreen({ initialTableNo, setCustomer, setOnboarded }: { initialTableNo?: number, setCustomer: (session: import('../store/useCartStore').CustomerSession) => void, setOnboarded: (s: boolean) => void }) {
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [manualTableNo, setManualTableNo] = useState('');
+    
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+
+    const isPhoneValid = phone.replace(/\D/g, '').length === 10;
+    const canSubmit = name.trim().length >= 2 && isPhoneValid && (initialTableNo || manualTableNo.trim().length > 0);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!canSubmit) return;
+        
+        setIsSubmitting(true);
+        setErrorMsg('');
+
+        try {
+            let finalTableNo = initialTableNo;
+
+            // Validate manual table number if necessary
+            if (!finalTableNo) {
+                const { data, error } = await supabase
+                    .from('restaurant_tables')
+                    .select('table_no')
+                    .eq('table_no', parseInt(manualTableNo))
+                    .maybeSingle();
+                
+                if (error || !data) {
+                    setErrorMsg("Invalid table number. Please check the table.");
+                    setIsSubmitting(false);
+                    return;
+                }
+                finalTableNo = data.table_no;
+            }
+
+            setCustomer({
+                name: name.trim(),
+                phone: phone.replace(/\D/g, ''),
+                table_no: finalTableNo!
+            });
+            setOnboarded(true);
+        } catch {
+            setErrorMsg("Network error verifying table.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
-        <div className="bg-white border border-[#C9974A]/15 rounded-xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
-            <div>
-                <div className="flex justify-between items-start gap-3 mb-1">
-                    <h3 className="font-semibold text-[#241B15]">{item.name}</h3>
-                    <span className="font-bold text-[#C9974A] whitespace-nowrap">₹{item.price}</span>
+        <div className="max-w-[430px] mx-auto min-h-screen bg-[#F6EEDF] relative shadow-2xl flex flex-col items-center justify-center p-6">
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="w-full bg-white p-8 rounded-3xl shadow-sm border border-[#C9974A]/20 flex flex-col items-center"
+            >
+                <div className="w-16 h-16 rounded-full bg-[#F6EEDF] border border-[#C9974A]/30 overflow-hidden flex items-center justify-center mb-6">
+                    <span className="font-bold text-[#4E1414] text-xl">TAJ</span>
                 </div>
+                <h1 className="text-2xl font-display font-bold text-[#4E1414] mb-2 text-center">Welcome to Hotel Taj Ooty</h1>
+                <p className="text-[#241B15]/70 text-sm text-center mb-8">Place your order below &mdash; we&apos;ll bring it right to your table.</p>
+
+                <form onSubmit={handleSubmit} className="w-full space-y-5">
+                    {errorMsg && <p className="text-red-500 text-xs font-bold text-center">{errorMsg}</p>}
+                    
+                    <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#241B15]/70 uppercase tracking-wider pl-2">Your Name</label>
+                        <input 
+                            required 
+                            type="text" 
+                            value={name} 
+                            onChange={e => setName(e.target.value)} 
+                            className="w-full bg-[#F6EEDF] border-none rounded-2xl px-5 py-4 text-[16px] text-[#241B15] focus:ring-2 focus:ring-[#C9974A]/50 placeholder:text-[#241B15]/30 min-h-[52px]" 
+                            placeholder="Enter your name"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#241B15]/70 uppercase tracking-wider pl-2">Phone Number</label>
+                        <input 
+                            required 
+                            type="tel" 
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={phone} 
+                            onChange={e => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                if (val.length <= 10) setPhone(val);
+                            }} 
+                            className={`w-full bg-[#F6EEDF] border-none rounded-2xl px-5 py-4 text-[16px] text-[#241B15] focus:ring-2 focus:ring-[#C9974A]/50 placeholder:text-[#241B15]/30 min-h-[52px] ${phone.length > 0 && !isPhoneValid ? 'ring-2 ring-red-400/50' : ''}`} 
+                            placeholder="10-digit mobile number"
+                        />
+                        {phone.length > 0 && !isPhoneValid && <p className="text-[10px] text-red-500 font-bold mt-1 pl-2">10 digits required</p>}
+                    </div>
+
+                    {initialTableNo ? (
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-[#241B15]/70 uppercase tracking-wider pl-2">Table Number</label>
+                            <div className="w-full bg-[#4E1414]/5 border border-[#4E1414]/10 rounded-2xl px-5 py-4 min-h-[52px] flex items-center text-[#4E1414] font-bold">
+                                Table {initialTableNo} ✓
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-[#241B15]/70 uppercase tracking-wider pl-2">Table Number</label>
+                            <input 
+                                required 
+                                type="number" 
+                                inputMode="numeric"
+                                value={manualTableNo} 
+                                onChange={e => setManualTableNo(e.target.value)} 
+                                className="w-full bg-[#F6EEDF] border-none rounded-2xl px-5 py-4 text-[16px] text-[#241B15] focus:ring-2 focus:ring-[#C9974A]/50 placeholder:text-[#241B15]/30 min-h-[52px]" 
+                                placeholder="Enter table number"
+                            />
+                        </div>
+                    )}
+
+                    <button 
+                        type="submit"
+                        disabled={isSubmitting || !canSubmit}
+                        className="w-full mt-4 bg-[#4E1414] hover:bg-[#350C0C] disabled:opacity-50 disabled:bg-[#4E1414]/50 text-[#C9974A] font-bold rounded-2xl shadow-lg transition-all flex items-center justify-center min-h-[56px] text-lg"
+                    >
+                        {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin text-[#F6EEDF]" /> : 'Start Ordering →'}
+                    </button>
+                </form>
+            </motion.div>
+        </div>
+    );
+}
+
+// -------------------------------------------------------------
+// Badge Component
+// -------------------------------------------------------------
+function CartBadge() {
+    const items = useCartStore((state) => state.items);
+    const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
+    if (totalQty === 0) return null;
+    return (
+        <span className="absolute -top-1 -right-1 bg-[#C9974A] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
+            {totalQty}
+        </span>
+    );
+}
+
+// -------------------------------------------------------------
+// Compact Mobile Item Row
+// -------------------------------------------------------------
+function CompactMobileItemRow({ item }: { item: import('../lib/types').MenuItem }) {
+    const items = useCartStore((state) => state.items);
+    const addItem = useCartStore((state) => state.addItem);
+    const updateQty = useCartStore((state) => state.updateQty);
+    
+    const cartItem = items.find(i => i.menu_item_id === item.id);
+    const qty = cartItem ? cartItem.qty : 0;
+
+    return (
+        <div className="flex items-center justify-between py-4 border-b border-[#241B15]/5">
+            <div className="flex-1 pr-3">
+                <h3 className="font-medium text-[#241B15] text-[16px] leading-snug break-words">{item.name}</h3>
             </div>
-            <div className="mt-4 flex justify-end">
-                <button
-                    onClick={() => addItem({ menu_item_id: item.id, name: item.name, price: item.price, qty: 1 })}
-                    className="bg-[#F6EEDF] hover:bg-[#C9974A]/20 text-[#4E1414] text-xs font-bold px-4 py-2 rounded-full transition-colors flex items-center gap-1 border border-[#C9974A]/30">
-                    <Plus className="w-3 h-3" /> Add
-                </button>
+            <div className="flex items-center gap-4 shrink-0">
+                <span className="font-bold text-[#C9974A] text-[14px]">₹{item.price}</span>
+                
+                {qty === 0 ? (
+                    <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        onClick={() => addItem({ menu_item_id: item.id, name: item.name, price: item.price, qty: 1 })}
+                        className="bg-white border border-[#C9974A]/30 text-[#4E1414] w-[44px] h-[36px] rounded-lg flex items-center justify-center shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </motion.button>
+                ) : (
+                    <div className="flex items-center bg-white border border-[#C9974A]/30 rounded-lg shadow-sm h-[36px] overflow-hidden">
+                        <motion.button 
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => updateQty(cartItem!.id, qty - 1)} 
+                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5"
+                        >
+                            <Minus className="w-3 h-3" />
+                        </motion.button>
+                        <span className="text-[14px] font-bold text-[#4E1414] w-[24px] text-center">{qty}</span>
+                        <motion.button 
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => updateQty(cartItem!.id, qty + 1)} 
+                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5"
+                        >
+                            <Plus className="w-3 h-3" />
+                        </motion.button>
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
-// The generic minimalist sticky cart drawer
-function CartIndicator() {
+// -------------------------------------------------------------
+// Simplified Cart Drawer Manager
+// -------------------------------------------------------------
+function CartDrawerManager({ setActiveOrder, customer }: { setActiveOrder: (id: string) => void, customer: import('../store/useCartStore').CustomerSession | null }) {
     const items = useCartStore((state) => state.items);
-    const customer = useCartStore((state) => state.customer);
+    const updateQty = useCartStore((state) => state.updateQty);
     const clearCart = useCartStore((state) => state.clearCart);
+    
+    const [isOpen, setIsOpen] = useState(false);
+    const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [errorMsg, setErrorMsg] = useState("");
-    const [successMsg, setSuccessMsg] = useState("");
+    const [errorMsg, setErrorMsg] = useState('');
 
     const total = items.reduce((acc, item) => acc + (item.price * item.qty), 0);
     const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
 
-    // Import action directly in the handler scope for client mapping
+    if (items.length === 0) {
+        if (isOpen) setIsOpen(false);
+        return null;
+    }
+
     const handleCheckout = async () => {
         if (!customer) return;
         setIsSubmitting(true);
-        setErrorMsg("");
+        setErrorMsg('');
 
+        const submittedItems = items.map((i, idx) => idx === 0 && notes ? { ...i, notes } : i);
+        
         try {
             const { submitCustomerOrder } = await import('../actions/submitOrder');
-            const res = await submitCustomerOrder(customer, items);
+            const res = await submitCustomerOrder(customer, submittedItems);
 
-            if (res.success) {
-                setSuccessMsg("Order Sent to Kitchen!");
-                setTimeout(() => clearCart(), 2000);
+            if (res.success && res.orderId) {
+                setActiveOrder(res.orderId);
+                clearCart();
+                setIsOpen(false);
             } else {
                 setErrorMsg(res.error || "Failed to submit.");
             }
@@ -172,51 +418,126 @@ function CartIndicator() {
         }
     };
 
-    if (items.length === 0) return null;
-
-    if (successMsg) {
-        return (
-            <motion.div initial={{ y: 100 }} animate={{ y: 0 }} className="fixed bottom-6 inset-x-6 z-50 flex justify-center pointer-events-none">
-                <div className="w-full max-w-sm bg-[#5C1616] pointer-events-auto rounded-2xl p-6 flex flex-col items-center shadow-2xl border border-[#C9974A]/50">
-                    <span className="text-[#C9974A] font-bold text-lg mb-1">{successMsg}</span>
-                    <span className="text-[#F6EEDF]/80 text-sm">A waiter is confirming your order.</span>
-                </div>
-            </motion.div>
-        );
-    }
-
     return (
-        <motion.div
-            initial={{ y: 100 }}
-            animate={{ y: 0 }}
-            className="fixed bottom-6 inset-x-6 z-50 flex justify-center pointer-events-none"
-        >
-            <div className="w-full max-w-sm bg-[#4E1414] pointer-events-auto rounded-2xl p-4 flex flex-col items-stretch shadow-2xl border border-[#C9974A]/30 gap-3">
-
-                {errorMsg && (
-                    <span className="text-red-400 text-xs font-semibold px-2">{errorMsg}</span>
-                )}
-
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-[#C9974A] text-[#241B15] w-10 h-10 rounded-full flex items-center justify-center font-bold">
-                            {totalQty}
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-[#F6EEDF] text-xs uppercase tracking-wider font-semibold">Total Price</span>
-                            <span className="text-white font-bold text-lg leading-none">₹{total}</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={handleCheckout}
-                        disabled={isSubmitting}
-                        className="bg-[#C9974A] hover:bg-white disabled:opacity-50 text-[#241B15] font-bold px-6 py-2.5 rounded-xl transition-colors shadow-lg"
+        <>
+            {/* Floating Cart Bar */}
+            <AnimatePresence>
+                {!isOpen && (
+                    <motion.div
+                        initial={{ y: 100 }}
+                        animate={{ y: 0 }}
+                        exit={{ y: 100 }}
+                        className="fixed bottom-0 max-w-[430px] w-full z-40 bg-[#4E1414] p-4 pb-safe-offset-4 rounded-t-3xl shadow-[0_-10px_40px_rgba(78,20,20,0.3)] cursor-pointer"
+                        onClick={() => setIsOpen(true)}
                     >
-                        {isSubmitting ? "Sending..." : "Checkout"}
-                    </button>
-                </div>
-            </div>
-        </motion.div>
+                        <div className="flex items-center justify-between text-[#F6EEDF]">
+                            <div className="flex items-center gap-2">
+                                <span className="bg-white/20 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                                    {totalQty}
+                                </span>
+                                <span className="font-semibold text-sm">items · ₹{total}</span>
+                            </div>
+                            <div className="flex items-center font-bold text-sm">
+                                View Cart <ShoppingBag className="w-4 h-4 ml-2" />
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Backdrop */}
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsOpen(false)}
+                        className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm max-w-[430px] mx-auto"
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Sliding Drawer */}
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        drag="y"
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(_, info) => {
+                            if (info.offset.y > 100 || info.velocity.y > 500) {
+                                setIsOpen(false);
+                            }
+                        }}
+                        initial={{ y: '100%' }}
+                        animate={{ y: 0 }}
+                        exit={{ y: '100%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        className="fixed bottom-0 max-w-[430px] w-full z-50 bg-[#F6EEDF] rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+                    >
+                        {/* Handle */}
+                        <div className="w-full flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing">
+                            <div className="w-12 h-1.5 bg-[#C9974A]/40 rounded-full" />
+                        </div>
+                        
+                        <div className="px-6 pb-3 flex justify-between items-center border-b border-[#C9974A]/20">
+                            <h2 className="text-xl font-display font-bold text-[#4E1414]">Your Order</h2>
+                            <button onClick={() => setIsOpen(false)} className="p-2 bg-white rounded-full text-[#4E1414] shadow-sm">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto px-6 py-4 flex-1 space-y-4">
+                            {errorMsg && <p className="text-red-500 text-xs font-bold text-center bg-red-50 p-2 rounded">{errorMsg}</p>}
+                            
+                            {/* Items List */}
+                            <div className="space-y-0">
+                                {items.map(item => (
+                                    <div key={item.id} className="flex justify-between items-center py-3 border-b border-[#241B15]/5">
+                                        <div className="flex-1 pr-2">
+                                            <h4 className="font-medium text-sm text-[#241B15]">{item.name}</h4>
+                                            <p className="text-xs text-[#C9974A] font-bold">₹{item.price}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3 bg-white border border-[#C9974A]/20 rounded-lg p-1 shadow-sm">
+                                            <button onClick={() => updateQty(item.id, item.qty - 1)} className="p-1 text-[#4E1414]"><Minus className="w-3 h-3" /></button>
+                                            <span className="text-sm font-bold text-[#4E1414] w-4 text-center">{item.qty}</span>
+                                            <button onClick={() => updateQty(item.id, item.qty + 1)} className="p-1 text-[#4E1414]"><Plus className="w-3 h-3" /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Order Notes */}
+                            <div className="space-y-1 mt-4">
+                                <label className="text-[11px] font-bold text-[#241B15]/70 uppercase tracking-wider">Any special requests?</label>
+                                <textarea 
+                                    value={notes} 
+                                    onChange={e => setNotes(e.target.value)} 
+                                    onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                    className="w-full bg-white border border-[#C9974A]/20 shadow-sm rounded-xl px-4 py-3 text-sm text-[#241B15] focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 min-h-[80px]" 
+                                    placeholder="E.g. less spicy, extra napkins..."
+                                />
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="bg-white border-t border-[#C9974A]/20 p-5 flex items-center justify-between pb-safe-offset-5 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                            <div>
+                                <p className="text-[11px] text-[#241B15]/60 font-semibold uppercase tracking-wider">Subtotal</p>
+                                <p className="text-xl font-black text-[#4E1414]">₹{total}</p>
+                            </div>
+                            <button 
+                                onClick={handleCheckout}
+                                disabled={isSubmitting}
+                                className="bg-[#4E1414] hover:bg-[#350C0C] disabled:opacity-50 disabled:bg-[#4E1414]/50 text-[#C9974A] font-bold px-8 py-3.5 rounded-xl shadow-lg transition-all flex items-center gap-2 min-w-[150px] justify-center"
+                            >
+                                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin text-[#F6EEDF]" /> : 'Place Order →'}
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </>
     );
 }

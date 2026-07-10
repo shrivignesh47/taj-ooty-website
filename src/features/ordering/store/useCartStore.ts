@@ -21,10 +21,14 @@ interface CartStore {
     customer: CustomerSession | null;
     items: CartItem[];
     setCustomer: (session: CustomerSession) => void;
+    setActiveOrder: (orderId: string) => void;
+    clearActiveOrder: () => void;
     addItem: (item: Omit<CartItem, 'id'>) => void;
     removeItem: (id: string) => void;
     updateQty: (id: string, qty: number) => void;
     clearCart: () => void;
+    isOnboarded: boolean;
+    setOnboarded: (status: boolean) => void;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -32,8 +36,18 @@ export const useCartStore = create<CartStore>()(
         (set) => ({
             customer: null,
             items: [],
+            isOnboarded: false,
 
+            setOnboarded: (status) => set({ isOnboarded: status }),
             setCustomer: (session) => set({ customer: session }),
+
+            setActiveOrder: (orderId) => set((state) => ({ 
+                customer: state.customer ? { ...state.customer, active_order_id: orderId } : null 
+            })),
+
+            clearActiveOrder: () => set((state) => ({
+                customer: state.customer ? { ...state.customer, active_order_id: undefined } : null
+            })),
 
             addItem: (item) => set((state) => {
                 // Find if identical item + notes already exists

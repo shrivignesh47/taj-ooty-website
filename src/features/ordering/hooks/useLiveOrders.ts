@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase';
 import { Order, OrderItem, RestaurantTable } from '../lib/types';
 
 export type LiveOrder = Order & {
-    restaurant_tables: RestaurantTable;
-    order_items: (OrderItem & { menu_items: { name: string } })[];
+    restaurant_tables: RestaurantTable | null;
+    order_items: (OrderItem & { status?: string; menu_items: { name: string } | null })[];
+    order_status_history?: { status: string; changed_at: string }[];
 };
 
 export function useLiveOrders(allowedStatuses: string[]) {
@@ -25,10 +26,18 @@ export function useLiveOrders(allowedStatuses: string[]) {
           order_items (
             *,
             menu_items (name)
+          ),
+          order_status_history (
+            status,
+            changed_at
           )
         `)
                 .in('status', allowed)
                 .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Failed to fetch live orders', error);
+            }
 
             if (!error && data) {
                 setOrders(data as unknown as LiveOrder[]);
@@ -43,6 +52,16 @@ export function useLiveOrders(allowedStatuses: string[]) {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
+                () => fetchOrders()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'order_items' },
+                () => fetchOrders()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'order_status_history' },
                 () => fetchOrders()
             )
             .subscribe();

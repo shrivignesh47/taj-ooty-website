@@ -19,6 +19,7 @@ export async function verifyStaff() {
     const { data: staffMember } = await supabaseAdminEdge
         .from('staff_users')
         .select(`
+            id,
             name, 
             roles (
                 name,
@@ -52,7 +53,8 @@ export async function verifyStaff() {
     return {
         success: true,
         user: {
-            id: user.id,
+            id: staffMember.id,
+            authId: user.id,
             name: staffMember.name,
             roleName: roleData?.name || 'Unknown',
             permissions: Array.from(permissions)

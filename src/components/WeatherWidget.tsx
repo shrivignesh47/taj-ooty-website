@@ -50,6 +50,7 @@ export default function WeatherWidget({ compact = false }: { compact?: boolean }
         };
 
         // Hydrate
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTimeStr(formatTime());
         const wasClicked = sessionStorage.getItem('weatherPillClicked');
         if (!wasClicked) setShowBadge(true);

@@ -18,6 +18,7 @@ import { AdminStaff } from './components/AdminStaff';
 import { AdminRoles } from './components/AdminRoles';
 import { AdminAnalytics } from './components/AdminAnalytics';
 import { AdminSettings } from './components/AdminSettings';
+import { AdminExport } from './components/AdminExport';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const NAV_TABS = [
@@ -205,6 +206,7 @@ export function AdminDash() {
 
     useEffect(() => {
         if (!loading && permittedTabs.length > 0 && !permittedTabs.find(t => t.id === activeTab)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setActiveTab(permittedTabs[0].id);
         }
     }, [permittedTabs, activeTab, loading]);
@@ -349,6 +351,16 @@ export function AdminDash() {
                         {activeTab === 'Settings' && (
                             <motion.div key="sets" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
                                 <AdminSettings />
+                            </motion.div>
+                        )}
+                        {activeTab === 'Export' && (
+                            <motion.div key="export" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminExport
+                                    orders={orders}
+                                    menu={menu}
+                                    staff={staff}
+                                    customers={customers}
+                                />
                             </motion.div>
                         )}
                     </AnimatePresence>

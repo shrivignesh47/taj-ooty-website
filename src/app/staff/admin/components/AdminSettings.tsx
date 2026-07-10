@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Save, Store, Receipt, MapPin, Phone, Percent, ShieldCheck } from 'lucide-react';
-import { supabase } from '@/features/ordering/lib/supabase';
+import { Save, Store, Receipt, MapPin, Phone, Percent, ShieldCheck, Printer } from 'lucide-react';
+import { fetchRestaurantSettings, saveRestaurantSettings } from '@/features/ordering/actions/adminActions';
 
 export function AdminSettings() {
     const [form, setForm] = useState({
@@ -13,7 +13,11 @@ export function AdminSettings() {
         service_charge_percent: 5.0,
         phone: '',
         email: '',
-        address: ''
+        address: '',
+        auto_print_on_accept: false,
+        printer_name: '',
+        print_kot: true,
+        print_bill: true
     });
 
     const [loading, setLoading] = useState(true);
@@ -21,33 +25,35 @@ export function AdminSettings() {
     const [rowId, setRowId] = useState<string | null>(null);
 
     useEffect(() => {
-        supabase.from('restaurant_settings').select('*').limit(1)
-            .then(({ data }) => {
-                if (data && data.length > 0) {
-                    setRowId(data[0].id);
-                    setForm({
-                        restaurant_name: data[0].restaurant_name || '',
-                        gst_number: data[0].gst_number || '',
-                        fssai_number: data[0].fssai_number || '',
-                        service_charge_percent: data[0].service_charge_percent || 0,
-                        phone: data[0].phone || '',
-                        email: data[0].email || '',
-                        address: data[0].address || ''
-                    });
-                }
-                setLoading(false);
-            });
+        fetchRestaurantSettings().then((result) => {
+            if (result.success && result.data) {
+                setRowId(result.data.id);
+                setForm({
+                    restaurant_name: result.data.restaurant_name || '',
+                    gst_number: result.data.gst_number || '',
+                    fssai_number: result.data.fssai_number || '',
+                    service_charge_percent: result.data.service_charge_percent || 0,
+                    phone: result.data.phone || '',
+                    email: result.data.email || '',
+                    address: result.data.address || '',
+                    auto_print_on_accept: result.data.auto_print_on_accept || false,
+                    printer_name: result.data.printer_name || '',
+                    print_kot: result.data.print_kot !== undefined ? result.data.print_kot : true,
+                    print_bill: result.data.print_bill !== undefined ? result.data.print_bill : true
+                });
+            }
+            setLoading(false);
+        });
     }, []);
 
     const handleSave = async () => {
         setSaving(true);
-        if (rowId) {
-            await supabase.from('restaurant_settings').update(form).eq('id', rowId);
+        const result = await saveRestaurantSettings(form);
+        if (!result.success) {
+            alert(`Settings save failed: ${result.error}`);
         } else {
-            const { data } = await supabase.from('restaurant_settings').insert(form).select().single();
-            if (data) setRowId(data.id);
+            alert('Settings saved successfully!');
         }
-        alert('Settings saved successfully!');
         setSaving(false);
     };
 
@@ -62,10 +68,10 @@ export function AdminSettings() {
         setSaving(true);
         try {
             const [menuRes, customerRes, tableRes, ordersRes] = await Promise.all([
-                supabase.from('menu_items').select('*'),
-                supabase.from('orders').select('customer_name, customer_phone, order_items(qty, price_at_order)'),
-                supabase.from('restaurant_tables').select('*'),
-                supabase.from('orders').select('*')
+                import('@/features/ordering/lib/supabase').then(({ supabase }) => supabase.from('menu_items').select('*')),
+                import('@/features/ordering/lib/supabase').then(({ supabase }) => supabase.from('orders').select('customer_name, customer_phone, order_items(qty, price_at_order)')),
+                import('@/features/ordering/lib/supabase').then(({ supabase }) => supabase.from('restaurant_tables').select('*')),
+                import('@/features/ordering/lib/supabase').then(({ supabase }) => supabase.from('orders').select('*'))
             ]);
 
             const wb = XLSX.utils.book_new();
@@ -120,90 +126,148 @@ export function AdminSettings() {
             </div>
 
             <div className="flex flex-col xl:flex-row gap-6 items-start">
-                <div className="w-full xl:w-2/3 bg-white p-8 rounded-2xl border border-[#C9974A]/20 shadow-sm">
-                    <form className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <Store className="w-4 h-4" /> Restaurant Name
-                                </label>
-                                <input
-                                    type="text" value={form.restaurant_name} onChange={e => setForm({ ...form, restaurant_name: e.target.value })}
-                                    className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
-                                />
+                <div className="w-full xl:w-2/3 space-y-6">
+                    {/* Restaurant Info Settings */}
+                    <div className="bg-white p-8 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                        <h3 className="text-[#4E1414] font-black text-xl mb-6">Restaurant Information</h3>
+                        <form className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <Store className="w-4 h-4" /> Restaurant Name
+                                    </label>
+                                    <input
+                                        type="text" value={form.restaurant_name} onChange={e => setForm({ ...form, restaurant_name: e.target.value })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <Receipt className="w-4 h-4" /> GSTIN Number
+                                    </label>
+                                    <input
+                                        type="text" value={form.gst_number} onChange={e => setForm({ ...form, gst_number: e.target.value.toUpperCase() })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <Receipt className="w-4 h-4" /> GSTIN Number
-                                </label>
-                                <input
-                                    type="text" value={form.gst_number} onChange={e => setForm({ ...form, gst_number: e.target.value.toUpperCase() })}
-                                    className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
-                                />
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div>
-                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <ShieldCheck className="w-4 h-4" /> FSSAI
-                                </label>
-                                <input
-                                    type="text" value={form.fssai_number} onChange={e => setForm({ ...form, fssai_number: e.target.value })}
-                                    className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
-                                />
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <ShieldCheck className="w-4 h-4" /> FSSAI
+                                    </label>
+                                    <input
+                                        type="text" value={form.fssai_number} onChange={e => setForm({ ...form, fssai_number: e.target.value })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <Percent className="w-4 h-4" /> Service Charge %
+                                    </label>
+                                    <input
+                                        type="number" step="0.1" value={form.service_charge_percent} onChange={e => setForm({ ...form, service_charge_percent: parseFloat(e.target.value) || 0 })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <Percent className="w-4 h-4" /> Service Charge %
-                                </label>
-                                <input
-                                    type="number" step="0.1" value={form.service_charge_percent} onChange={e => setForm({ ...form, service_charge_percent: parseFloat(e.target.value) || 0 })}
-                                    className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
-                                />
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <Phone className="w-4 h-4" /> Contact Phone
+                                    </label>
+                                    <input
+                                        type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        @ Contact Email
+                                    </label>
+                                    <input
+                                        type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <Phone className="w-4 h-4" /> Contact Phone
+                                    <MapPin className="w-4 h-4" /> Physical Address
                                 </label>
-                                <input
-                                    type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                                <textarea
+                                    rows={3} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
                                     className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
                                 />
                             </div>
+                        </form>
+                    </div>
+
+                    {/* Printing Settings */}
+                    <div className="bg-white p-8 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                        <h3 className="text-[#4E1414] font-black text-xl mb-6 flex items-center gap-2">
+                            <Printer className="w-5 h-5" /> Printing Configuration
+                        </h3>
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <label className="font-bold text-[#4E1414]">Auto-Print on Accept</label>
+                                    <p className="text-[#241B15]/60 text-sm">Automatically print KOT when order is confirmed by staff</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setForm({ ...form, auto_print_on_accept: !form.auto_print_on_accept })}
+                                    className={`w-16 h-8 rounded-full transition-colors relative ${form.auto_print_on_accept ? 'bg-[#4E1414]' : 'bg-gray-300'}`}
+                                >
+                                    <div className={`absolute w-6 h-6 bg-white rounded-full top-1 transition-all ${form.auto_print_on_accept ? 'left-9' : 'left-1'}`} />
+                                </button>
+                            </div>
+
                             <div>
-                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    @ Contact Email
+                                <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2">
+                                    Printer Name (Optional)
                                 </label>
                                 <input
-                                    type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                                    type="text" value={form.printer_name} onChange={e => setForm({ ...form, printer_name: e.target.value })}
                                     className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
                                 />
+                                <p className="mt-2 text-xs text-[#241B15]/60">
+                                    Browser printing can open the system print dialog in real time, but silent background printing still depends on the browser and OS printer setup.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox" checked={form.print_kot}
+                                        onChange={e => setForm({ ...form, print_kot: e.target.checked })}
+                                        className="w-5 h-5 rounded border-2 border-[#4E1414] text-[#C9974A] focus:ring-[#C9974A]"
+                                    />
+                                    <label className="font-bold text-[#4E1414]">Print KOT Tickets</label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox" checked={form.print_bill}
+                                        onChange={e => setForm({ ...form, print_bill: e.target.checked })}
+                                        className="w-5 h-5 rounded border-2 border-[#4E1414] text-[#C9974A] focus:ring-[#C9974A]"
+                                    />
+                                    <label className="font-bold text-[#4E1414]">Print Bills</label>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div>
-                            <label className="block text-xs font-black text-[#4E1414] uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <MapPin className="w-4 h-4" /> Physical Address
-                            </label>
-                            <textarea
-                                rows={3} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
-                                className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/40 rounded-xl px-4 py-3 text-sm font-bold text-[#241B15] outline-none focus:border-[#4E1414] focus:bg-white transition-colors"
-                            />
-                        </div>
-
-                        <div className="pt-4 border-t border-[#C9974A]/20 flex justify-end">
-                            <button
-                                type="button" onClick={handleSave} disabled={saving}
-                                className="flex items-center justify-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-8 py-3 rounded-xl shadow-lg font-bold hover:bg-[#350C0C] transition-all disabled:opacity-50"
-                            >
-                                <Save className="w-5 h-5 text-[#C9974A]" /> {saving ? 'Writing parameters...' : 'Lock Global Settings'}
-                            </button>
-                        </div>
-                    </form>
+                    <div className="pt-4 border-t border-[#C9974A]/20 flex justify-end">
+                        <button
+                            type="button" onClick={handleSave} disabled={saving}
+                            className="flex items-center justify-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-8 py-3 rounded-xl shadow-lg font-bold hover:bg-[#350C0C] transition-all disabled:opacity-50"
+                        >
+                            <Save className="w-5 h-5 text-[#C9974A]" /> {saving ? 'Writing parameters...' : 'Lock Global Settings'}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="w-full xl:w-1/3 mt-6 xl:mt-0">
