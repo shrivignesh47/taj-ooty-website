@@ -11,6 +11,15 @@ export default async function WaiterOrdersPage() {
         redirect('/staff/login');
     }
 
+    const isAdmin = auth.user.roleName.toLowerCase() === 'admin';
+    const hasAccess = isAdmin || auth.user.permissions.some(p => [
+        'view_orders', 'confirm_orders', 'edit_orders', 'manage_tables',
+        'view_kitchen_queue', 'update_prep_status', 'view_billing', 'generate_bills'
+    ].includes(p));
+    if (!hasAccess) {
+        redirect('/staff/dashboard');
+    }
+
     return (
         <main className="min-h-screen bg-[#F6EEDF] p-4 lg:p-12 pb-24">
             <div className="max-w-7xl mx-auto">

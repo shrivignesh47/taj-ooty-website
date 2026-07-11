@@ -28,7 +28,7 @@ export async function fetchAdminDashboardData() {
                 .order('created_at', { ascending: false }),
             supabaseAdmin.from('staff_users').select('*, roles (name)'),
             supabaseAdmin.from('menu_items').select('*, categories(name)').order('name'),
-            supabaseAdmin.from('roles').select('*, role_permissions(permissions(key))').order('name'),
+            supabaseAdmin.from('roles').select('*, role_permissions(permissions(id, key))').order('name'),
             supabaseAdmin.from('permissions').select('*')
         ]);
 

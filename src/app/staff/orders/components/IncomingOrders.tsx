@@ -9,7 +9,7 @@ import { fetchRestaurantSettings } from '@/features/ordering/actions/adminAction
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Loader2, Edit3, X, Trash2, Plus, Minus, Send, Search, Printer } from 'lucide-react';
 
-export function IncomingOrders({ orders, activeUser, catalog }: { orders: LiveOrder[], activeUser: any, catalog: any }) {
+export function IncomingOrders({ orders, activeUser, catalog, onRefresh }: { orders: LiveOrder[], activeUser: any, catalog: any, onRefresh?: () => void }) {
     if (orders.length === 0) {
         return (
             <div className="text-center opacity-50 py-10">
@@ -23,27 +23,37 @@ export function IncomingOrders({ orders, activeUser, catalog }: { orders: LiveOr
         <div className="flex flex-col gap-4">
             <AnimatePresence>
                 {orders.map(order => (
-                    <IncomingOrderCard key={order.id} order={order} activeUser={activeUser} catalog={catalog} />
+                    <IncomingOrderCard key={order.id} order={order} activeUser={activeUser} catalog={catalog} onRefresh={onRefresh} />
                 ))}
             </AnimatePresence>
         </div>
     );
 }
 
-function IncomingOrderCard({ order, activeUser, catalog }: { order: LiveOrder, activeUser: any, catalog: any }) {
+function IncomingOrderCard({ order, activeUser, catalog, onRefresh }: { order: LiveOrder, activeUser: any, catalog: any, onRefresh?: () => void }) {
     const [submitting, setSubmitting] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [cancelPrompt, setCancelPrompt] = useState(false);
     const [cancelReason, setCancelReason] = useState('');
+    const [now, setNow] = useState(() => Date.now());
 
-    const timeSince = Math.floor((new Date().getTime() - new Date(order.created_at).getTime()) / 60000);
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 15000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const timeSince = Math.floor((now - new Date(order.created_at).getTime()) / 60000);
     const totalAmount = order.order_items?.reduce((acc: number, item: any) => acc + (item.qty * item.price_at_order), 0) || 0;
 
     const handleCancel = async () => {
         if (!cancelReason.trim()) return alert('Provide a reason for cancellation');
         setSubmitting(true);
         const res = await cancelOrder(order.id, activeUser.id, cancelReason);
-        if (!res.success) alert(res.error);
+        if (!res.success) {
+            alert(res.error);
+        } else if (onRefresh) {
+            onRefresh();
+        }
         setSubmitting(false);
         setCancelPrompt(false);
     };
@@ -131,6 +141,7 @@ function IncomingOrderCard({ order, activeUser, catalog }: { order: LiveOrder, a
                         activeUser={activeUser} 
                         catalog={catalog}
                         onClose={() => setDrawerOpen(false)} 
+                        onRefresh={onRefresh}
                     />
                 )}
             </AnimatePresence>
@@ -138,7 +149,8 @@ function IncomingOrderCard({ order, activeUser, catalog }: { order: LiveOrder, a
     );
 }
 
-function ReviewDrawer({ order, activeUser, catalog, onClose }: { order: LiveOrder, activeUser: any, catalog: any, onClose: () => void }) {
+function ReviewDrawer({ order, activeUser, catalog, onClose, onRefresh }: { order: LiveOrder, activeUser: any, catalog: any, onClose: () => void, onRefresh?: () => void }) {
+    const hasEditPerm = activeUser.roleName?.toLowerCase() === 'admin' || activeUser.permissions?.includes('edit_orders');
     // Local state for editable items
     const [items, setItems] = useState<{ menu_item_id: string, name: string, qty: number, price: number }[]>(
         order.order_items?.map((i: any) => ({
@@ -245,6 +257,9 @@ function ReviewDrawer({ order, activeUser, catalog, onClose }: { order: LiveOrde
             if (settings?.auto_print_on_accept) {
                 handlePrint(order, items);
             }
+            if (onRefresh) {
+                onRefresh();
+            }
             onClose();
         } else {
             alert(res.error);
@@ -273,11 +288,17 @@ function ReviewDrawer({ order, activeUser, catalog, onClose }: { order: LiveOrde
                                 <h4 className="font-semibold text-sm text-[#241B15]">{item.name}</h4>
                                 <p className="text-xs text-[#C9974A] font-bold">₹{item.price}</p>
                             </div>
-                            <div className="flex items-center gap-3 bg-[#F6EEDF] border border-[#C9974A]/20 rounded-lg p-1 shadow-inner">
-                                <button onClick={() => updateQty(idx, -1)} className="p-1.5 text-[#4E1414] active:bg-black/5 rounded"><Minus className="w-3 h-3" /></button>
-                                <span className="text-sm font-bold text-[#4E1414] w-4 text-center">{item.qty}</span>
-                                <button onClick={() => updateQty(idx, 1)} className="p-1.5 text-[#4E1414] active:bg-black/5 rounded"><Plus className="w-3 h-3" /></button>
-                            </div>
+                            {hasEditPerm ? (
+                                <div className="flex items-center gap-3 bg-[#F6EEDF] border border-[#C9974A]/20 rounded-lg p-1 shadow-inner">
+                                    <button onClick={() => updateQty(idx, -1)} className="p-1.5 text-[#4E1414] active:bg-black/5 rounded"><Minus className="w-3 h-3" /></button>
+                                    <span className="text-sm font-bold text-[#4E1414] w-4 text-center">{item.qty}</span>
+                                    <button onClick={() => updateQty(idx, 1)} className="p-1.5 text-[#4E1414] active:bg-black/5 rounded"><Plus className="w-3 h-3" /></button>
+                                </div>
+                            ) : (
+                                <div className="bg-[#F6EEDF] border border-[#C9974A]/20 rounded-lg px-3 py-1.5 shadow-inner">
+                                    <span className="text-sm font-black text-[#4E1414]">{item.qty} Qty</span>
+                                </div>
+                            )}
                         </div>
                     ))}
                     {items.length === 0 && <p className="text-center text-red-500 font-bold py-4">Order is empty!</p>}
@@ -308,76 +329,78 @@ function ReviewDrawer({ order, activeUser, catalog, onClose }: { order: LiveOrde
                     </div>
 
                     {/* Add New Items Section */}
-                    <div className="border-t border-[#C9974A]/20 pt-4 mt-2">
-                        <p className="text-xs font-bold uppercase tracking-wider text-[#4E1414] mb-3 opacity-80">Add Item to Order</p>
-                        
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <Search className="h-4 w-4 text-[#C9974A]" />
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Search menu items..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white border border-[#C9974A]/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-[#241B15] font-semibold focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 focus:border-[#4E1414] transition-all shadow-sm mb-3"
-                            />
-                        </div>
-
-                        <div className="bg-white border border-[#C9974A]/20 rounded-xl overflow-hidden shadow-inner max-h-[35vh] overflow-y-auto">
-                            {catalog?.categories.map((cat: any) => {
-                                const catItems = catalog.menuItems.filter((m: any) => 
-                                    m.category_id === cat.id && 
-                                    m.name.toLowerCase().includes(searchQuery.toLowerCase())
-                                );
-                                
-                                if (catItems.length === 0) return null;
-
-                                return (
-                                    <div key={cat.id}>
-                                        <div className="bg-[#F6EEDF] px-3 py-1.5 sticky top-0 z-10 border-b border-t first:border-t-0 border-[#C9974A]/20">
-                                            <span className="text-[10px] font-black uppercase text-[#4E1414] tracking-wider">{cat.name}</span>
-                                        </div>
-                                        <div className="divide-y divide-[#C9974A]/10">
-                                            {catItems.map((m: any) => (
-                                                <div key={m.id} className="flex justify-between items-center p-3 hover:bg-gray-50 transition-colors">
-                                                    <div>
-                                                        <h5 className="text-sm font-bold text-[#241B15]">{m.name}</h5>
-                                                        <p className="text-xs font-bold text-[#C9974A]">₹{m.price}</p>
-                                                    </div>
-                                                    <button 
-                                                        onClick={() => {
-                                                            const existsIdx = items.findIndex(i => i.menu_item_id === m.id);
-                                                            if (existsIdx >= 0) {
-                                                                updateQty(existsIdx, 1);
-                                                            } else {
-                                                                setItems([...items, {
-                                                                    menu_item_id: m.id,
-                                                                    name: m.name,
-                                                                    price: Number(m.price),
-                                                                    qty: 1
-                                                                }]);
-                                                            }
-                                                            setSearchQuery(''); // Optional: clear search on add
-                                                        }}
-                                                        className="bg-[#F6EEDF] text-[#4E1414] w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#4E1414] hover:text-white transition-colors border border-[#C9974A]/30 shadow-sm active:scale-95"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    {hasEditPerm && (
+                        <div className="border-t border-[#C9974A]/20 pt-4 mt-2">
+                            <p className="text-xs font-bold uppercase tracking-wider text-[#4E1414] mb-3 opacity-80">Add Item to Order</p>
                             
-                            {catalog?.menuItems.filter((m: any) => m.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-                                <div className="p-6 text-center text-[#241B15]/50 text-sm font-semibold">
-                                    No items found matching &quot;{searchQuery}&quot;
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Search className="h-4 w-4 text-[#C9974A]" />
                                 </div>
-                            )}
+                                <input
+                                    type="text"
+                                    placeholder="Search menu items..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full bg-white border border-[#C9974A]/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-[#241B15] font-semibold focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 focus:border-[#4E1414] transition-all shadow-sm mb-3"
+                                />
+                            </div>
+
+                            <div className="bg-white border border-[#C9974A]/20 rounded-xl overflow-hidden shadow-inner max-h-[35vh] overflow-y-auto">
+                                {catalog?.categories.map((cat: any) => {
+                                    const catItems = catalog.menuItems.filter((m: any) => 
+                                        m.category_id === cat.id && 
+                                        m.name.toLowerCase().includes(searchQuery.toLowerCase())
+                                    );
+                                    
+                                    if (catItems.length === 0) return null;
+
+                                    return (
+                                        <div key={cat.id}>
+                                            <div className="bg-[#F6EEDF] px-3 py-1.5 sticky top-0 z-10 border-b border-t first:border-t-0 border-[#C9974A]/20">
+                                                <span className="text-[10px] font-black uppercase text-[#4E1414] tracking-wider">{cat.name}</span>
+                                            </div>
+                                            <div className="divide-y divide-[#C9974A]/10">
+                                                {catItems.map((m: any) => (
+                                                    <div key={m.id} className="flex justify-between items-center p-3 hover:bg-gray-50 transition-colors">
+                                                        <div>
+                                                            <h5 className="text-sm font-bold text-[#241B15]">{m.name}</h5>
+                                                            <p className="text-xs font-bold text-[#C9974A]">₹{m.price}</p>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => {
+                                                                const existsIdx = items.findIndex(i => i.menu_item_id === m.id);
+                                                                if (existsIdx >= 0) {
+                                                                    updateQty(existsIdx, 1);
+                                                                } else {
+                                                                    setItems([...items, {
+                                                                        menu_item_id: m.id,
+                                                                        name: m.name,
+                                                                        price: Number(m.price),
+                                                                        qty: 1
+                                                                    }]);
+                                                                }
+                                                                setSearchQuery(''); // Optional: clear search on add
+                                                            }}
+                                                            className="bg-[#F6EEDF] text-[#4E1414] w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#4E1414] hover:text-white transition-colors border border-[#C9974A]/30 shadow-sm active:scale-95"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                
+                                {catalog?.menuItems.filter((m: any) => m.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                                    <div className="p-6 text-center text-[#241B15]/50 text-sm font-semibold">
+                                        No items found matching &quot;{searchQuery}&quot;
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </motion.div>
         </div>

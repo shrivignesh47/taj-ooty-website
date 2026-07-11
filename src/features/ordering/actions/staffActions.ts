@@ -128,3 +128,18 @@ export async function deleteCustomRole(roleId: string) {
     revalidatePath('/staff/admin');
     return { success: true };
 }
+
+export async function updateStaffSelf(id: string, name: string, phone: string) {
+    try {
+        const { error } = await admin.from('staff_users').update({
+            name,
+            phone
+        }).eq('id', id);
+
+        if (error) return { success: false, error: error.message };
+        revalidatePath('/staff/orders');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

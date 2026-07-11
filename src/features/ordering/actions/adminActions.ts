@@ -265,3 +265,51 @@ export async function saveRestaurantSettings(payload: {
     revalidatePath('/staff/admin');
     return { success: true };
 }
+
+export async function deleteAllOrders() {
+    try {
+        const auth = await verifyStaff();
+        if (!auth.success || !auth.user) {
+            return { success: false, error: 'Unauthorized Session' };
+        }
+
+        // Delete bills first due to FK constraints
+        await admin.from('bills').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        
+        // Delete all orders (will cascade delete order_items and order_status_history)
+        const { error } = await admin.from('orders').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        
+        revalidatePath('/staff/admin');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function deleteOrder(orderId: string) {
+    try {
+        const auth = await verifyStaff();
+        if (!auth.success || !auth.user) {
+            return { success: false, error: 'Unauthorized Session' };
+        }
+
+        // Delete bill linked to this order first due to FK constraints
+        await admin.from('bills').delete().eq('order_id', orderId);
+        
+        // Delete the order itself (will cascade delete order_items and order_status_history)
+        const { error } = await admin.from('orders').delete().eq('id', orderId);
+        
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        
+        revalidatePath('/staff/admin');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

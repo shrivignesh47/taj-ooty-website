@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Order, OrderItem, RestaurantTable } from '../lib/types';
 
@@ -15,12 +15,11 @@ export function useLiveOrders(allowedStatuses: string[]) {
     // Memoize dependency
     const statusKey = allowedStatuses.join(',');
 
-    useEffect(() => {
-        const fetchOrders = async () => {
-            const allowed = statusKey.split(',');
-            const { data, error } = await supabase
-                .from('orders')
-                .select(`
+    const fetchOrders = useCallback(async () => {
+        const allowed = statusKey.split(',');
+        const { data, error } = await supabase
+            .from('orders')
+            .select(`
           *,
           restaurant_tables (*),
           order_items (
@@ -32,44 +31,52 @@ export function useLiveOrders(allowedStatuses: string[]) {
             changed_at
           )
         `)
-                .in('status', allowed)
-                .order('created_at', { ascending: false });
+            .in('status', allowed)
+            .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('Failed to fetch live orders', error);
-            }
+        if (error) {
+            console.error('Failed to fetch live orders', error);
+        }
 
-            if (!error && data) {
-                setOrders(data as unknown as LiveOrder[]);
-            }
-            setLoading(false);
-        };
+        if (!error && data) {
+            setOrders(data as unknown as LiveOrder[]);
+        }
+        setLoading(false);
+    }, [statusKey]);
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchOrders();
 
         const channel = supabase
-            .channel('live-orders')
+            .channel(`live-orders-${Math.random().toString(36).substring(2, 9)}`)
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
-                () => fetchOrders()
+                () => {
+                    fetchOrders();
+                }
             )
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'order_items' },
-                () => fetchOrders()
+                () => {
+                    fetchOrders();
+                }
             )
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'order_status_history' },
-                () => fetchOrders()
+                () => {
+                    fetchOrders();
+                }
             )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [statusKey]);
+    }, [fetchOrders]);
 
-    return { orders, loading };
+    return { orders, loading, refetch: fetchOrders };
 }

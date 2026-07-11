@@ -5,7 +5,9 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList } from 'lucide-react';
 import { logoutStaff } from '@/features/ordering/actions/auth';
+import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/features/ordering/lib/supabase';
 
 import { fetchAdminDashboardData } from '@/features/ordering/actions/fetchAdminStats';
 import { AdminOverview } from './components/AdminOverview';
@@ -112,12 +114,62 @@ export function AdminDash() {
     }, []);
 
     useEffect(() => {
-        // eslint-disable-next-line
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchData();
-        const interval = setInterval(fetchData, 10000);
-        return () => clearInterval(interval);
+        const interval = setInterval(fetchData, 30000); // Poll less frequently since we have realtime updates
+
+        const channel = supabase
+            .channel('admin-realtime-dashboard')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => {
+                    fetchData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'order_items' },
+                () => {
+                    fetchData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'order_status_history' },
+                () => {
+                    fetchData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'roles' },
+                () => {
+                    fetchData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'role_permissions' },
+                () => {
+                    fetchData();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'permissions' },
+                () => {
+                    fetchData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            clearInterval(interval);
+            supabase.removeChannel(channel);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchData]);
 
     // Menu handlers
     const handleDeleteMenu = (id: string) => setMenu(m => m.filter(x => x.id !== id));
@@ -253,7 +305,10 @@ export function AdminDash() {
                     ))}
                 </nav>
 
-                <div className="p-3 border-t border-[#C9974A]/20">
+                <div className="p-3 border-t border-[#C9974A]/20 space-y-1.5">
+                    <Link href="/staff/dashboard" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl font-bold text-xs uppercase tracking-wider transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
+                        ← Stations Hub
+                    </Link>
                     <form action={logoutStaff}>
                         <button type="submit" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/60 hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-xl font-bold transition-all">
                             <LogOut className="w-4 h-4" /> Sign Out
@@ -291,7 +346,7 @@ export function AdminDash() {
 
                         {activeTab === 'Orders' && (
                             <motion.div key="ord" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
-                                <AdminOrders orders={orders} />
+                                <AdminOrders orders={orders} onRefresh={fetchData} />
                             </motion.div>
                         )}
 

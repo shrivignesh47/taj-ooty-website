@@ -2,12 +2,14 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase } from '@/features/ordering/lib/supabase';
+import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
+import { deleteAllOrders, deleteOrder } from '@/features/ordering/actions/adminActions';
 
 interface Props {
     orders: any[];
+    onRefresh?: () => Promise<void> | void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -20,10 +22,39 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: 'bg-red-50 text-red-700 border-red-200'
 };
 
-export function AdminOrders({ orders }: Props) {
+export function AdminOrders({ orders, onRefresh }: Props) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [expanded, setExpanded] = useState<string | null>(null);
+    const [deletingAll, setDeletingAll] = useState(false);
+
+    const handleDeleteAll = async () => {
+        if (!confirm("Are you absolutely sure you want to delete ALL orders and bills? This action is permanent and cannot be undone.")) return;
+        if (!confirm("Double check: Confirm complete deletion of all records?")) return;
+
+        setDeletingAll(true);
+        const res = await deleteAllOrders();
+        setDeletingAll(false);
+
+        if (res.success) {
+            if (onRefresh) await onRefresh();
+            alert("All orders deleted successfully.");
+        } else {
+            alert("Failed to delete orders: " + res.error);
+        }
+    };
+
+    const handleDeleteOrder = async (orderId: string) => {
+        if (!confirm("Are you sure you want to delete this order? This action is permanent and cannot be undone.")) return;
+
+        const res = await deleteOrder(orderId);
+        if (res.success) {
+            if (onRefresh) await onRefresh();
+            alert("Order deleted successfully.");
+        } else {
+            alert("Failed to delete order: " + res.error);
+        }
+    };
 
     const filtered = orders.filter(o => {
         const matchStatus = statusFilter === 'all' || o.status === statusFilter;
@@ -36,27 +67,43 @@ export function AdminOrders({ orders }: Props) {
     const handleOverrideStatus = async (orderId: string, newStatus: string) => {
         if (!confirm(`Force override status to ${newStatus}?`)) return;
 
-        await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-        // Supabase realtime will trigger AdminDash refresh automatically for live apps.
-        // Wait, AdminDash has setInterval for 10s, but order page doesn't have local refresh here without passing fetchData.
-        // I will just let the next Dashboard poll handle it.
+        const res = await advanceOrderStatus(orderId, newStatus);
+        if (res && 'error' in res && res.error) {
+            alert('Failed to override status: ' + res.error);
+            return;
+        }
+
+        if (onRefresh) {
+            await onRefresh();
+        }
         alert('Order status overridden.');
-    }
+    };
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex bg-white border border-[#C9974A]/30 rounded-xl overflow-hidden shadow-sm w-full md:w-auto">
-                    <div className="pl-3 py-2 flex items-center justify-center text-[#C9974A]">
-                        <Search className="w-5 h-5" />
+                <div className="flex gap-3 items-center w-full md:w-auto">
+                    <div className="flex bg-white border border-[#C9974A]/30 rounded-xl overflow-hidden shadow-sm flex-1 md:flex-none">
+                        <div className="pl-3 py-2 flex items-center justify-center text-[#C9974A]">
+                            <Search className="w-5 h-5" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search IDs, tables, customers..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="px-3 py-2 outline-none text-[#241B15] w-full md:w-64 text-sm font-medium"
+                        />
                     </div>
-                    <input
-                        type="text"
-                        placeholder="Search IDs, tables, customers..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="px-3 py-2 outline-none text-[#241B15] w-full md:w-64 text-sm font-medium"
-                    />
+                    {orders.length > 0 && (
+                        <button 
+                            onClick={handleDeleteAll} 
+                            disabled={deletingAll}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95 duration-100 disabled:opacity-50"
+                        >
+                            <Trash2 className="w-4 h-4" /> Delete All
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex gap-2 bg-[#F6EEDF] p-1 rounded-xl border border-[#C9974A]/30 overflow-x-auto taj-scrollbar">
@@ -157,6 +204,12 @@ export function AdminOrders({ orders }: Props) {
                                                                 <option value="billed">Billed</option>
                                                                 <option value="cancelled">Cancelled</option>
                                                             </select>
+                                                            <button 
+                                                                onClick={() => handleDeleteOrder(o.id)}
+                                                                className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 duration-100 mt-3"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" /> Delete Order
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </td>

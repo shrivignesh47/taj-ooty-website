@@ -8,7 +8,7 @@ import { markOrderServed, sendTableToCashier } from '@/features/ordering/actions
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, DollarSign, ChefHat, CheckSquare } from 'lucide-react';
 
-export function ActiveOrders({ orders, activeUser, onAddItems }: { orders: LiveOrder[], activeUser: any, onAddItems: (tableNo: number) => void }) {
+export function ActiveOrders({ orders, activeUser, onAddItems, onRefresh }: { orders: LiveOrder[], activeUser: any, onAddItems: (tableNo: number) => void, onRefresh?: () => void }) {
     // Group orders by table
     const tableGroups: Record<string, { table_no: number, orders: LiveOrder[] }> = {};
     
@@ -33,13 +33,13 @@ export function ActiveOrders({ orders, activeUser, onAddItems }: { orders: LiveO
     return (
         <div className="flex flex-col gap-6">
             {tables.map(table => (
-                <TableGroup key={table.orders[0].table_id} table={table} activeUser={activeUser} onAddItems={onAddItems} />
+                <TableGroup key={table.orders[0].table_id} table={table} activeUser={activeUser} onAddItems={onAddItems} onRefresh={onRefresh} />
             ))}
         </div>
     );
 }
 
-function TableGroup({ table, activeUser, onAddItems }: { table: { table_no: number, orders: LiveOrder[] }, activeUser: any, onAddItems: (tableNo: number) => void }) {
+function TableGroup({ table, activeUser, onAddItems, onRefresh }: { table: { table_no: number, orders: LiveOrder[] }, activeUser: any, onAddItems: (tableNo: number) => void, onRefresh?: () => void }) {
     const [submitting, setSubmitting] = useState(false);
 
     // If ALL orders for this table are "served", we show Send to Cashier
@@ -48,21 +48,29 @@ function TableGroup({ table, activeUser, onAddItems }: { table: { table_no: numb
     const handleSendToCashier = async () => {
         setSubmitting(true);
         const res = await sendTableToCashier(table.orders[0].table_id!, activeUser.id);
-        if (!res?.success) alert(res?.error);
+        if (res?.success) {
+            if (onRefresh) onRefresh();
+        } else {
+            alert(res?.error);
+        }
         setSubmitting(false);
     };
+
+    const hasAddPerm = activeUser.roleName?.toLowerCase() === 'admin' || activeUser.permissions?.includes('edit_orders') || activeUser.permissions?.includes('manage_tables');
 
     return (
         <div className="bg-white rounded-2xl shadow-xl border border-[#C9974A]/20 overflow-hidden">
             <div className="bg-[#4E1414] px-4 py-3 flex justify-between items-center text-[#F6EEDF]">
                 <h3 className="font-display font-bold text-lg">Table {table.table_no}</h3>
                 <div className="flex items-center gap-3">
-                    <button 
-                        onClick={() => onAddItems(table.table_no)} 
-                        className="bg-[#C9974A] text-[#4E1414] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
-                    >
-                        + Add Items
-                    </button>
+                    {hasAddPerm && (
+                        <button 
+                            onClick={() => onAddItems(table.table_no)} 
+                            className="bg-[#C9974A] text-[#4E1414] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                        >
+                            + Add Items
+                        </button>
+                    )}
                     <div className="text-xs font-bold uppercase tracking-wider opacity-80">
                         {table.orders.length} Order{table.orders.length !== 1 ? 's' : ''}
                     </div>
@@ -71,7 +79,7 @@ function TableGroup({ table, activeUser, onAddItems }: { table: { table_no: numb
 
             <div className="p-4 flex flex-col gap-4">
                 {table.orders.map(order => (
-                    <ActiveOrderCard key={order.id} order={order} activeUser={activeUser} />
+                    <ActiveOrderCard key={order.id} order={order} activeUser={activeUser} onRefresh={onRefresh} />
                 ))}
 
                 {allServed && (
@@ -91,7 +99,7 @@ function TableGroup({ table, activeUser, onAddItems }: { table: { table_no: numb
     );
 }
 
-function ActiveOrderCard({ order, activeUser }: { order: LiveOrder, activeUser: any }) {
+function ActiveOrderCard({ order, activeUser, onRefresh }: { order: LiveOrder, activeUser: any, onRefresh?: () => void }) {
     const [submitting, setSubmitting] = useState(false);
 
     const items = order.order_items || [];
@@ -106,7 +114,11 @@ function ActiveOrderCard({ order, activeUser }: { order: LiveOrder, activeUser: 
     const handleMarkServed = async () => {
         setSubmitting(true);
         const res = await markOrderServed(order.id, activeUser.id);
-        if (!res.success) alert(res.error);
+        if (res.success) {
+            if (onRefresh) onRefresh();
+        } else {
+            alert(res.error);
+        }
         setSubmitting(false);
     };
 

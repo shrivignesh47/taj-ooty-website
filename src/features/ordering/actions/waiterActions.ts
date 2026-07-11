@@ -74,6 +74,13 @@ export async function cancelOrder(orderId: string, waiterId: string, reason: str
             changed_by: waiterId,
             notes: reason
         });
+
+        // Audit log entry
+        await adminEdge.from('staff_activity_log').insert({
+            staff_id: waiterId,
+            action: 'REJECT_ORDER',
+            details: { order_id: orderId, reason }
+        });
         
         revalidatePath('/staff/orders');
         return { success: true };
