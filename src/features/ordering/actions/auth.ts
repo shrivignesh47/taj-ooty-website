@@ -86,11 +86,20 @@ export async function loginStaff(formData: FormData) {
         if (user) {
             const { data: staffMember } = await supabaseAdminEdge
                 .from('staff_users')
-                .select('roles(name)')
+                .select('id, roles(name)')
                 .eq('auth_id', user.id)
                 .single();
 
             const roleName = (staffMember?.roles as any)?.name?.toLowerCase();
+
+            if (staffMember?.id) {
+                await supabaseAdminEdge.from('staff_activity_log').insert({
+                    staff_id: staffMember.id,
+                    action: 'LOGIN',
+                    details: { method: 'password', role: roleName }
+                });
+            }
+
             if (roleName === 'admin') return { success: true, redirectUrl: '/staff/admin' };
             if (roleName === 'waiter') return { success: true, redirectUrl: '/staff/orders' };
             if (roleName === 'kitchen') return { success: true, redirectUrl: '/staff/kitchen' };
@@ -105,6 +114,21 @@ export async function loginStaff(formData: FormData) {
 
 export async function logoutStaff() {
     const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+        const { data: staffMember } = await supabaseAdminEdge
+            .from('staff_users')
+            .select('id')
+            .eq('auth_id', user.id)
+            .single();
+        if (staffMember?.id) {
+            await supabaseAdminEdge.from('staff_activity_log').insert({
+                staff_id: staffMember.id,
+                action: 'LOGOUT',
+                details: { trigger: 'user_action' }
+            });
+        }
+    }
     await supabase.auth.signOut();
     redirect('/staff/login');
 }

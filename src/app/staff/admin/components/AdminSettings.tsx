@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Save, Store, Receipt, MapPin, Phone, Percent, ShieldCheck, Printer } from 'lucide-react';
-import { fetchRestaurantSettings, saveRestaurantSettings } from '@/features/ordering/actions/adminActions';
+import { Save, Store, Receipt, MapPin, Phone, Percent, ShieldCheck, Printer, ChefHat, CheckSquare, Square } from 'lucide-react';
+import { fetchRestaurantSettings, saveRestaurantSettings, fetchStationMappings, saveStationMappings } from '@/features/ordering/actions/adminActions';
 
 export function AdminSettings() {
     const [form, setForm] = useState({
@@ -24,8 +24,17 @@ export function AdminSettings() {
     const [saving, setSaving] = useState(false);
     const [rowId, setRowId] = useState<string | null>(null);
 
+    const [stations, setStations] = useState<any[]>([]);
+    const [categories, setCategories] = useState<any[]>([]);
+    const [stationMap, setStationMap] = useState<{ station_id: string, category_id: string }[]>([]);
+    const [stationRoutingEnabled, setStationRoutingEnabled] = useState(false);
+    const [savingRouting, setSavingRouting] = useState(false);
+
     useEffect(() => {
-        fetchRestaurantSettings().then((result) => {
+        Promise.all([
+            fetchRestaurantSettings(),
+            fetchStationMappings()
+        ]).then(([result, routingRes]) => {
             if (result.success && result.data) {
                 setRowId(result.data.id);
                 setForm({
@@ -42,9 +51,35 @@ export function AdminSettings() {
                     print_bill: result.data.print_bill !== undefined ? result.data.print_bill : true
                 });
             }
+            if (routingRes.success) {
+                setStations(routingRes.stations || []);
+                setCategories(routingRes.categories || []);
+                setStationMap(routingRes.map || []);
+                setStationRoutingEnabled(routingRes.station_routing_enabled || false);
+            }
             setLoading(false);
         });
     }, []);
+
+    const handleToggleCategoryMapping = (stationId: string, categoryId: string) => {
+        const exists = stationMap.some(m => m.station_id === stationId && m.category_id === categoryId);
+        if (exists) {
+            setStationMap(stationMap.filter(m => !(m.station_id === stationId && m.category_id === categoryId)));
+        } else {
+            setStationMap([...stationMap, { station_id: stationId, category_id: categoryId }]);
+        }
+    };
+
+    const handleSaveRouting = async () => {
+        setSavingRouting(true);
+        const res = await saveStationMappings(stationRoutingEnabled, stationMap);
+        if (!res.success) {
+            alert(`Failed to save routing: ${res.error}`);
+        } else {
+            alert('Kitchen Station Routing & Category Mappings saved successfully!');
+        }
+        setSavingRouting(false);
+    };
 
     const handleSave = async () => {
         setSaving(true);
@@ -258,6 +293,82 @@ export function AdminSettings() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Kitchen Display Station Routing */}
+                    <div className="bg-white p-8 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-2">
+                                <ChefHat className="w-6 h-6 text-[#C9974A]" />
+                                <div>
+                                    <h3 className="font-black text-xl text-[#4E1414]">KOT Station Routing & Display Filtering</h3>
+                                    <p className="text-xs text-[#241B15]/60 mt-0.5">Route categories (Tandoor, Gravy, Breads) directly to specific kitchen station monitors.</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <label className="flex items-center cursor-pointer select-none">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={stationRoutingEnabled}
+                                            onChange={e => setStationRoutingEnabled(e.target.checked)}
+                                            className="sr-only"
+                                        />
+                                        <div className={`w-11 h-6 bg-gray-200 rounded-full transition-colors ${stationRoutingEnabled ? 'bg-[#4E1414]' : 'bg-[#C9974A]/30'}`}></div>
+                                        <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${stationRoutingEnabled ? 'transform translate-x-5 bg-[#C9974A]' : ''}`}></div>
+                                    </div>
+                                    <span className="ml-2 text-xs font-bold text-[#4E1414]">
+                                        {stationRoutingEnabled ? 'Routing Active' : 'Routing Disabled'}
+                                    </span>
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveRouting}
+                                    disabled={savingRouting}
+                                    className="bg-[#C9974A] text-[#4E1414] px-4 py-2 rounded-xl text-xs font-black shadow hover:bg-[#b88539] transition-all disabled:opacity-50"
+                                >
+                                    {savingRouting ? 'Saving...' : 'Save Routing Rules'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {stations.length === 0 ? (
+                            <div className="bg-[#F6EEDF]/30 p-6 rounded-2xl text-center border border-[#C9974A]/20 text-[#241B15]/60 text-xs font-bold">
+                                No kitchen stations configured. Ensure kitchen_stations SQL migration has been run in Supabase Studio.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {stations.map(st => (
+                                    <div key={st.id} className="bg-[#F6EEDF]/20 p-4 rounded-2xl border border-[#C9974A]/30 shadow-sm">
+                                        <div className="flex items-center gap-2 border-b border-[#C9974A]/20 pb-2 mb-3">
+                                            <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ backgroundColor: st.color || '#C9974A' }} />
+                                            <span className="font-extrabold text-sm text-[#4E1414]">{st.name}</span>
+                                        </div>
+                                        <div className="space-y-1.5 max-h-48 overflow-y-auto taj-scrollbar pr-1">
+                                            {categories.map(cat => {
+                                                const isMapped = stationMap.some(m => m.station_id === st.id && m.category_id === cat.id);
+                                                return (
+                                                    <div
+                                                        key={cat.id}
+                                                        onClick={() => handleToggleCategoryMapping(st.id, cat.id)}
+                                                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer text-xs font-bold transition-colors ${
+                                                            isMapped ? 'bg-[#4E1414] text-[#F6EEDF] shadow-sm' : 'bg-white text-[#241B15]/70 hover:bg-[#F6EEDF]'
+                                                        }`}
+                                                    >
+                                                        <span>{cat.name}</span>
+                                                        {isMapped ? (
+                                                            <CheckSquare className="w-4 h-4 text-[#C9974A]" />
+                                                        ) : (
+                                                            <Square className="w-4 h-4 text-gray-300" />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="pt-4 border-t border-[#C9974A]/20 flex justify-end">

@@ -34,6 +34,13 @@ export async function acceptAndConfirmOrder(
         const { error: orderErr } = await adminEdge.from('orders').update(payload).eq('id', orderId);
         if (orderErr) throw orderErr;
 
+        // Sync waiter to physical table so Admin table view shows exact assigned waiter
+        const { data: ord } = await adminEdge.from('orders').select('table_id').eq('id', orderId).single();
+        const targetTableId = payload.table_id || ord?.table_id;
+        if (targetTableId && waiterId) {
+            await adminEdge.from('restaurant_tables').update({ assigned_waiter_id: waiterId }).eq('id', targetTableId);
+        }
+
         // Replace items
         await adminEdge.from('order_items').delete().eq('order_id', orderId);
         
@@ -51,6 +58,12 @@ export async function acceptAndConfirmOrder(
             order_id: orderId,
             status: 'confirmed',
             changed_by: waiterId
+        });
+
+        await adminEdge.from('staff_activity_log').insert({
+            staff_id: waiterId,
+            action: 'ORDER_CONFIRMED',
+            details: { order_id: orderId, table_id: targetTableId }
         });
 
         revalidatePath('/staff/orders');

@@ -15,12 +15,17 @@ export function AdminActivityLog() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
+    const loadLog = () => {
+        setLoading(true);
         fetchActivityLog().then(res => {
             if (res.success) setLog(res.data);
             else setError(res.error ?? 'Failed to load activity log');
             setLoading(false);
         });
+    };
+
+    useEffect(() => {
+        loadLog();
     }, []);
 
     if (loading) return (
@@ -34,17 +39,18 @@ export function AdminActivityLog() {
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6">
             <p className="font-bold">Could not load activity log</p>
             <p className="text-sm mt-1">{error}</p>
-            <p className="text-xs mt-2 text-red-500">
-                Ensure the <code>staff_activity_log</code> table exists. Run the migration SQL in supabase/migrations if needed.
-            </p>
+            <button onClick={loadLog} className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow">Try Reloading</button>
         </div>
     );
 
     if (log.length === 0) return (
-        <div className="flex flex-col items-center justify-center h-48 text-[#4E1414]/60">
+        <div className="flex flex-col items-center justify-center h-48 text-[#4E1414]/60 bg-white rounded-2xl border border-[#C9974A]/20 p-8">
             <ShieldCheck className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-lg font-bold">No activity recorded yet</p>
-            <p className="text-sm text-[#241B15]/50 mt-1">Staff login/logout events will appear here.</p>
+            <p className="text-sm text-[#241B15]/50 mt-1">Staff login/logout, settings updates, and order confirmations will appear here.</p>
+            <button onClick={loadLog} className="mt-4 flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-[#350C0C] transition-colors">
+                🔄 Refresh Logs
+            </button>
         </div>
     );
 
@@ -53,7 +59,10 @@ export function AdminActivityLog() {
             <div className="bg-[#4E1414] px-6 py-4 flex items-center gap-3">
                 <Activity className="w-5 h-5 text-[#C9974A]" />
                 <h3 className="font-bold text-[#F6EEDF]">System Audit Log</h3>
-                <span className="ml-auto text-xs text-[#C9974A] font-bold">{log.length} records</span>
+                <button onClick={loadLog} className="ml-auto flex items-center gap-1.5 bg-[#C9974A]/20 text-[#C9974A] hover:bg-[#C9974A]/30 px-3 py-1 rounded-lg text-xs font-bold transition-colors">
+                    🔄 Refresh
+                </button>
+                <span className="text-xs text-[#F6EEDF]/80 font-bold ml-2">{log.length} records</span>
             </div>
             <div className="overflow-x-auto taj-scrollbar">
                 <table className="w-full text-sm text-left">

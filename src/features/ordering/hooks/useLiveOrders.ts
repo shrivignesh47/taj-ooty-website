@@ -4,16 +4,17 @@ import { Order, OrderItem, RestaurantTable } from '../lib/types';
 
 export type LiveOrder = Order & {
     restaurant_tables: RestaurantTable | null;
-    order_items: (OrderItem & { status?: string; menu_items: { name: string } | null })[];
+    order_items: (OrderItem & { status?: string; menu_items: { name: string; is_veg?: boolean; category_id?: string } | null })[];
     order_status_history?: { status: string; changed_at: string }[];
 };
 
-export function useLiveOrders(allowedStatuses: string[]) {
+export function useLiveOrders(allowedStatuses: string[], options?: { ascending?: boolean }) {
     const [orders, setOrders] = useState<LiveOrder[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Memoize dependency
     const statusKey = allowedStatuses.join(',');
+    const ascending = options?.ascending ?? false;
 
     const fetchOrders = useCallback(async () => {
         const allowed = statusKey.split(',');
@@ -24,7 +25,7 @@ export function useLiveOrders(allowedStatuses: string[]) {
           restaurant_tables (*),
           order_items (
             *,
-            menu_items (name)
+            menu_items (name, is_veg, category_id)
           ),
           order_status_history (
             status,
@@ -32,7 +33,7 @@ export function useLiveOrders(allowedStatuses: string[]) {
           )
         `)
             .in('status', allowed)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending });
 
         if (error) {
             console.error('Failed to fetch live orders', error);
@@ -42,7 +43,7 @@ export function useLiveOrders(allowedStatuses: string[]) {
             setOrders(data as unknown as LiveOrder[]);
         }
         setLoading(false);
-    }, [statusKey]);
+    }, [statusKey, ascending]);
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -78,5 +79,5 @@ export function useLiveOrders(allowedStatuses: string[]) {
         };
     }, [fetchOrders]);
 
-    return { orders, loading, refetch: fetchOrders };
+    return { orders, setOrders, loading, refetch: fetchOrders };
 }

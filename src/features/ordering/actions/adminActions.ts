@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
@@ -52,11 +53,18 @@ export async function deleteTable(tableId: string) {
 }
 
 export async function updateTableWaiter(tableId: string, waiterId: string | null) {
+    const auth = await verifyStaff();
     const { error } = await admin
         .from('restaurant_tables')
         .update({ assigned_waiter_id: waiterId })
         .eq('id', tableId);
     if (error) return { success: false, error: error.message };
+
+    await logAuditActivity(auth.success ? (auth.user?.id ?? null) : null, 'TABLE_WAITER_ASSIGNED', {
+        table_id: tableId,
+        waiter_id: waiterId || 'unassigned'
+    });
+
     revalidatePath('/staff/admin');
     return { success: true };
 }
@@ -168,31 +176,35 @@ export async function bulkAddMenuItems(items: { name: string, price: number, cat
 
 // ─── Activity Log ────────────────────────────────────────────────────────────
 
+export async function logAuditActivity(staffId: string | null, action: string, details?: any) {
+    try {
+        await admin.from('staff_activity_log').insert({
+            staff_id: staffId,
+            action,
+            details: details ?? {}
+        });
+    } catch (err) {
+        console.error('Audit log insert failed:', err);
+    }
+}
+
 export async function fetchActivityLog() {
     const { data, error } = await admin
         .from('staff_activity_log')
         .select('*, staff_users(name, roles(name))')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
 
     if (error) return { success: false, error: error.message, data: [] };
     return { success: true, data: data ?? [] };
 }
 
 export async function logStaffLogin(staffId: string) {
-    await admin.from('staff_activity_log').insert({
-        staff_id: staffId,
-        action: 'LOGIN',
-        details: { method: 'password' }
-    });
+    await logAuditActivity(staffId, 'LOGIN', { method: 'password' });
 }
 
 export async function logStaffLogout(staffId: string) {
-    await admin.from('staff_activity_log').insert({
-        staff_id: staffId,
-        action: 'LOGOUT',
-        details: { trigger: 'user_action' }
-    });
+    await logAuditActivity(staffId, 'LOGOUT', { trigger: 'user_action' });
 }
 
 // ─── Restaurant Settings ─────────────────────────────────────────────────────
@@ -228,6 +240,7 @@ export async function saveRestaurantSettings(payload: {
     printer_name: string;
     print_kot: boolean;
     print_bill: boolean;
+    station_routing_enabled?: boolean;
 }) {
     const auth = await verifyStaff();
     if (!auth.success || !auth.user) {
@@ -262,7 +275,88 @@ export async function saveRestaurantSettings(payload: {
         return { success: false, error: error.message };
     }
 
+    await logAuditActivity(auth.user.id, 'SETTINGS_UPDATED', payload);
+
     revalidatePath('/staff/admin');
+    return { success: true };
+}
+
+export async function fetchStationMappings() {
+    const auth = await verifyStaff();
+    if (!auth.success) return { success: false, error: 'Unauthorized' };
+
+    const [stationsRes, categoriesRes, mappingsRes, settingsRes] = await Promise.all([
+        admin.from('kitchen_stations').select('*').order('sort_order', { ascending: true }),
+        admin.from('categories').select('*').order('sort_order', { ascending: true }),
+        admin.from('station_category_map').select('*'),
+        admin.from('restaurant_settings').select('station_routing_enabled').limit(1).maybeSingle()
+    ]);
+
+    return {
+        success: true,
+        stations: stationsRes.data ?? [],
+        categories: categoriesRes.data ?? [],
+        map: mappingsRes.data ?? [],
+        station_routing_enabled: settingsRes.data?.station_routing_enabled || false
+    };
+}
+
+export async function saveStationMappings(stationRoutingEnabled: boolean, mappings: { station_id: string, category_id: string }[]) {
+    const auth = await verifyStaff();
+    if (!auth.success || !auth.user) return { success: false, error: 'Unauthorized' };
+
+    // 1. Update restaurant_settings
+    const { data: existing } = await admin.from('restaurant_settings').select('id').limit(1).maybeSingle();
+    if (existing) {
+        await admin.from('restaurant_settings').update({ station_routing_enabled: stationRoutingEnabled }).eq('id', existing.id);
+    } else {
+        await admin.from('restaurant_settings').insert({ station_routing_enabled: stationRoutingEnabled });
+    }
+
+    // 2. Replace all mappings
+    await admin.from('station_category_map').delete().neq('station_id', '00000000-0000-0000-0000-000000000000');
+    if (mappings.length > 0) {
+        const { error: mapErr } = await admin.from('station_category_map').insert(mappings);
+        if (mapErr) return { success: false, error: mapErr.message };
+    }
+
+    await logAuditActivity(auth.user.id, 'STATION_ROUTING_UPDATED', { enabled: stationRoutingEnabled, mappingsCount: mappings.length });
+
+    revalidatePath('/staff/admin');
+    revalidatePath('/staff/kitchen');
+    return { success: true };
+}
+
+export async function saveKdsConfig(kdsConfig: Record<string, unknown>) {
+    const auth = await verifyStaff();
+    if (!auth.success || !auth.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const { data: existing, error: readError } = await admin
+        .from('restaurant_settings')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+    if (readError) {
+        return { success: false, error: readError.message };
+    }
+
+    if (!existing) {
+        const { error } = await admin.from('restaurant_settings').insert({
+            kds_config: kdsConfig,
+        });
+        if (error) return { success: false, error: error.message };
+    } else {
+        const { error } = await admin
+            .from('restaurant_settings')
+            .update({ kds_config: kdsConfig })
+            .eq('id', existing.id);
+        if (error) return { success: false, error: error.message };
+    }
+
+    revalidatePath('/staff/kitchen');
     return { success: true };
 }
 
@@ -285,8 +379,8 @@ export async function deleteAllOrders() {
         
         revalidatePath('/staff/admin');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
     }
 }
 
@@ -309,7 +403,7 @@ export async function deleteOrder(orderId: string) {
         
         revalidatePath('/staff/admin');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
     }
 }

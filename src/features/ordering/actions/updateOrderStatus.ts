@@ -34,6 +34,14 @@ async function logOrderStatus(orderId: string, status: string, changedBy: string
             changed_by: changedBy
         }]);
 
+    await supabaseAdmin
+        .from('staff_activity_log')
+        .insert([{
+            staff_id: changedBy,
+            action: `ORDER_${status.toUpperCase()}`,
+            details: { order_id: orderId, status }
+        }]).catch(() => {});
+
     if (error) {
         console.error('Failed to log order history', error);
     }
@@ -149,5 +157,28 @@ export async function markKitchenOrderReady(orderId: string) {
     revalidatePath('/staff/kitchen');
     revalidatePath('/staff/orders');
     revalidatePath('/staff/dashboard');
+    return { success: true };
+}
+
+export async function toggleOrderItemDone(orderItemId: string, isDone: boolean) {
+    const identity = await requireStaffIdentity();
+    if ('error' in identity) {
+        return identity;
+    }
+
+    const { error } = await supabaseAdmin
+        .from('order_item_status')
+        .upsert({
+            order_item_id: orderItemId,
+            is_done: isDone,
+            marked_by: identity.staff.id,
+            marked_at: new Date().toISOString()
+        }, { onConflict: 'order_item_id' });
+
+    if (error) {
+        return { error: `Failed to update item status: ${error.message}` };
+    }
+
+    revalidatePath('/staff/kitchen');
     return { success: true };
 }
