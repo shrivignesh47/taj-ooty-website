@@ -47,6 +47,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 CREATE OR REPLACE FUNCTION "public"."has_permission"("perm_key" "text") RETURNS boolean
     LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
     AS $$
   select exists (
     select 1 from staff_users su
@@ -214,7 +215,7 @@ ALTER TABLE "public"."roles" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."staff_users" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "auth_id" "uuid",
+    "auth_id" "uuid" UNIQUE,
     "name" "text" NOT NULL,
     "phone" "text",
     "role_id" "uuid",
@@ -438,10 +439,12 @@ CREATE POLICY "staff with generate_bills can manage bills" ON "public"."bills" U
 
 
 CREATE POLICY "staff with manage_roles can manage roles" ON "public"."roles" USING ("public"."has_permission"('manage_roles'::"text"));
+CREATE POLICY "authenticated users can view roles" ON "public"."roles" FOR SELECT TO authenticated USING (true);
 
 
 
 CREATE POLICY "staff with manage_staff can manage staff" ON "public"."staff_users" USING ("public"."has_permission"('manage_staff'::"text"));
+CREATE POLICY "staff users can view their own profile" ON "public"."staff_users" FOR SELECT TO authenticated USING (auth_id = auth.uid());
 
 
 

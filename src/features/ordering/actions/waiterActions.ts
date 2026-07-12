@@ -54,6 +54,9 @@ export async function acceptAndConfirmOrder(
         });
 
         revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -83,6 +86,9 @@ export async function cancelOrder(orderId: string, waiterId: string, reason: str
         });
         
         revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -103,6 +109,9 @@ export async function markOrderServed(orderId: string, waiterId: string) {
         });
 
         revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -146,6 +155,9 @@ export async function sendTableToCashier(tableId: string, waiterId: string) {
         }
 
         revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -159,7 +171,7 @@ export async function submitWaiterOrder(
     customerPhone: string,
     items: { menu_item_id: string, qty: number, notes?: string, price: number }[]
 ) {
-    if (tableNo <= 0) return { success: false, error: 'Invalid table number' };
+    if (isNaN(tableNo) || tableNo <= 0) return { success: false, error: 'Invalid table number' };
     if (!items || items.length === 0) return { success: false, error: 'Cart is empty' };
 
     try {
@@ -173,33 +185,208 @@ export async function submitWaiterOrder(
             tableId = tables[0].id;
         }
 
-        const { data: order, error: orderErr } = await adminEdge.from('orders').insert([{
-            table_id: tableId,
-            customer_name: customerName || `Table ${tableNo} Guest`,
-            customer_phone: customerPhone || '0000000000',
-            status: 'confirmed',
-            waiter_id: waiterId
-        }]).select().single();
+        // Check if there is already an active order for this table
+        const { data: activeOrders } = await adminEdge
+            .from('orders')
+            .select('id, status')
+            .eq('table_id', tableId)
+            .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served'])
+            .order('created_at', { ascending: false });
 
-        if (orderErr) throw orderErr;
+        let orderId: string;
+
+        if (activeOrders && activeOrders.length > 0) {
+            // Append items to the existing active order!
+            const activeOrder = activeOrders[0];
+            orderId = activeOrder.id;
+
+            const orderItemsPayload = items.map(item => ({
+                order_id: orderId,
+                menu_item_id: item.menu_item_id,
+                qty: item.qty,
+                notes: item.notes || null,
+                price_at_order: item.price,
+                status: 'pending'
+            }));
+            await adminEdge.from('order_items').insert(orderItemsPayload);
+
+            // If existing order was served or ready, transition back to preparing so kitchen knows!
+            if (['served', 'ready'].includes(activeOrder.status)) {
+                await adminEdge.from('orders').update({ status: 'preparing' }).eq('id', orderId);
+                await adminEdge.from('order_status_history').insert({
+                    order_id: orderId,
+                    status: 'preparing',
+                    changed_by: waiterId
+                });
+            } else {
+                await adminEdge.from('orders').update({ updated_at: new Date().toISOString() }).eq('id', orderId);
+            }
+        } else {
+            // Create brand new order
+            const { data: order, error: orderErr } = await adminEdge.from('orders').insert([{
+                table_id: tableId,
+                customer_name: customerName || `Table ${tableNo} Guest`,
+                customer_phone: customerPhone || '0000000000',
+                status: 'confirmed',
+                waiter_id: waiterId
+            }]).select().single();
+
+            if (orderErr) throw orderErr;
+            orderId = order.id;
+
+            const orderItemsPayload = items.map(item => ({
+                order_id: orderId,
+                menu_item_id: item.menu_item_id,
+                qty: item.qty,
+                notes: item.notes || null,
+                price_at_order: item.price,
+                status: 'pending'
+            }));
+            await adminEdge.from('order_items').insert(orderItemsPayload);
+
+            await adminEdge.from('order_status_history').insert([
+                { order_id: orderId, status: 'pending', changed_by: waiterId },
+                { order_id: orderId, status: 'confirmed', changed_by: waiterId }
+            ]);
+        }
+
+        revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
+        return { success: true, orderId };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function addItemsToOrder(
+    orderId: string,
+    waiterId: string,
+    items: { menu_item_id: string, qty: number, price_at_order: number, notes?: string }[]
+) {
+    if (!items || items.length === 0) return { success: false, error: 'No items to add' };
+    try {
+        const { data: order } = await adminEdge.from('orders').select('id, status').eq('id', orderId).single();
+        if (!order) return { success: false, error: 'Order not found' };
 
         const orderItemsPayload = items.map(item => ({
-            order_id: order.id,
+            order_id: orderId,
             menu_item_id: item.menu_item_id,
             qty: item.qty,
             notes: item.notes || null,
-            price_at_order: item.price,
+            price_at_order: item.price_at_order,
             status: 'pending'
         }));
         await adminEdge.from('order_items').insert(orderItemsPayload);
 
-        await adminEdge.from('order_status_history').insert([
-            { order_id: order.id, status: 'pending', changed_by: waiterId },
-            { order_id: order.id, status: 'confirmed', changed_by: waiterId }
-        ]);
+        // If order was ready or served, transition back to preparing so kitchen sees the new items immediately
+        if (['served', 'ready'].includes(order.status)) {
+            await adminEdge.from('orders').update({ status: 'preparing' }).eq('id', orderId);
+            await adminEdge.from('order_status_history').insert({
+                order_id: orderId,
+                status: 'preparing',
+                changed_by: waiterId
+            });
+        } else {
+            await adminEdge.from('orders').update({ updated_at: new Date().toISOString() }).eq('id', orderId);
+        }
 
         revalidatePath('/staff/orders');
-        return { success: true, orderId: order.id };
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function updateOrderItemQty(orderItemId: string, newQty: number) {
+    try {
+        if (newQty <= 0) {
+            await adminEdge.from('order_items').delete().eq('id', orderItemId);
+        } else {
+            await adminEdge.from('order_items').update({ qty: newQty }).eq('id', orderItemId);
+        }
+        revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function deleteOrderItem(orderItemId: string) {
+    try {
+        await adminEdge.from('order_items').delete().eq('id', orderItemId);
+        revalidatePath('/staff/orders');
+        revalidatePath('/staff/kitchen');
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/admin');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function getOrCreateTableAndCheckOccupied(tableNo: number) {
+    try {
+        if (isNaN(tableNo) || tableNo <= 0) return { success: false, error: 'Invalid table number' };
+
+        // 1. Find if table exists
+        const { data: tables, error: tableErr } = await adminEdge
+            .from('restaurant_tables')
+            .select('id, table_no')
+            .eq('table_no', tableNo);
+
+        if (tableErr) throw tableErr;
+
+        let tableId: string;
+        let isNew = false;
+
+        if (!tables || tables.length === 0) {
+            // Table doesn't exist, create it!
+            const { data: newTable, error: createErr } = await adminEdge
+                .from('restaurant_tables')
+                .insert({ table_no: tableNo })
+                .select('id, table_no')
+                .single();
+
+            if (createErr) throw createErr;
+            tableId = newTable.id;
+            isNew = true;
+        } else {
+            tableId = tables[0].id;
+        }
+
+        // 2. If it's not a newly created table, check if it has active orders
+        if (!isNew) {
+            const { data: activeOrders, error: ordersErr } = await adminEdge
+                .from('orders')
+                .select('id, customer_name, customer_phone')
+                .eq('table_id', tableId)
+                .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served']);
+
+            if (ordersErr) throw ordersErr;
+
+            if (activeOrders && activeOrders.length > 0) {
+                // Instead of blocking with "Table already occupied", return success along with existing order details so customer/waiter can join & append!
+                return { 
+                    success: true, 
+                    tableNo,
+                    tableId,
+                    hasActiveOrder: true,
+                    activeOrderId: activeOrders[0].id,
+                    customerName: activeOrders[0].customer_name,
+                    customerPhone: activeOrders[0].customer_phone
+                };
+            }
+        }
+
+        return { success: true, tableNo, tableId, hasActiveOrder: false };
     } catch (e: any) {
         return { success: false, error: e.message };
     }

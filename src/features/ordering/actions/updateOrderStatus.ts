@@ -2,6 +2,7 @@
 
 import { createSupabaseServerClient } from '../lib/supabaseServer';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { revalidatePath } from 'next/cache';
 
 async function requireStaffIdentity() {
     const supabase = await createSupabaseServerClient();
@@ -55,6 +56,9 @@ export async function advanceOrderStatus(orderId: string, newStatus: string) {
 
     await logOrderStatus(orderId, newStatus, identity.staff.id);
 
+    revalidatePath('/staff/kitchen');
+    revalidatePath('/staff/orders');
+    revalidatePath('/staff/dashboard');
     return { success: true };
 }
 
@@ -78,6 +82,9 @@ export async function updateKitchenItemStatus(
         return { error: `Failed to update item status: ${error.message}` };
     }
 
+    revalidatePath('/staff/kitchen');
+    revalidatePath('/staff/orders');
+    revalidatePath('/staff/dashboard');
     return { success: true };
 }
 
@@ -107,6 +114,9 @@ export async function startKitchenOrder(orderId: string) {
     }
 
     await logOrderStatus(orderId, 'preparing', identity.staff.id);
+    revalidatePath('/staff/kitchen');
+    revalidatePath('/staff/orders');
+    revalidatePath('/staff/dashboard');
     return { success: true };
 }
 
@@ -136,5 +146,8 @@ export async function markKitchenOrderReady(orderId: string) {
     }
 
     await logOrderStatus(orderId, 'ready', identity.staff.id);
+    revalidatePath('/staff/kitchen');
+    revalidatePath('/staff/orders');
+    revalidatePath('/staff/dashboard');
     return { success: true };
 }

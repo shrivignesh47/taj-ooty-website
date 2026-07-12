@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus, Search, ShoppingBag, X, Loader2 } from 'lucide-react';
 import { CustomerOrderStatus } from './CustomerOrderStatus';
 import { supabase } from '../lib/supabase';
+import { getOrCreateTableAndCheckOccupied } from '../actions/waiterActions';
 
 export function SaaSMenuClient({ catalog, initialTableNo }: { catalog: MenuCatalog, initialTableNo?: number }) {
     const customer = useCartStore((state) => state.customer);
@@ -197,20 +198,22 @@ function OnboardingScreen({ initialTableNo, setCustomer, setOnboarded }: { initi
         try {
             let finalTableNo = initialTableNo;
 
-            // Validate manual table number if necessary
+            // Validate manual or initial table number
             if (!finalTableNo) {
-                const { data, error } = await supabase
-                    .from('restaurant_tables')
-                    .select('table_no')
-                    .eq('table_no', parseInt(manualTableNo))
-                    .maybeSingle();
-                
-                if (error || !data) {
-                    setErrorMsg("Invalid table number. Please check the table.");
+                const res = await getOrCreateTableAndCheckOccupied(parseInt(manualTableNo));
+                if (!res.success) {
+                    setErrorMsg(res.error || "Table already occupied. Enter correct table number.");
                     setIsSubmitting(false);
                     return;
                 }
-                finalTableNo = data.table_no;
+                finalTableNo = res.tableNo;
+            } else {
+                const res = await getOrCreateTableAndCheckOccupied(finalTableNo);
+                if (!res.success) {
+                    setErrorMsg(res.error || "Table already occupied.");
+                    setIsSubmitting(false);
+                    return;
+                }
             }
 
             setCustomer({

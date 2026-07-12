@@ -9,7 +9,7 @@ import {
     X, Trash2, Plus, Minus, Send, Search, Printer, AlertTriangle, 
     Loader2, Volume2, VolumeX, Edit3, ClipboardList, Info, LogOut, Phone, Shield, Clock, Download 
 } from 'lucide-react';
-import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier } from '@/features/ordering/actions/waiterActions';
+import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier, addItemsToOrder, updateOrderItemQty, deleteOrderItem } from '@/features/ordering/actions/waiterActions';
 import { updateStaffSelf, resetStaffPassword } from '@/features/ordering/actions/staffActions';
 import { logoutStaff, verifyStaff } from '@/features/ordering/actions/auth';
 import { MenuCatalog, getLiveCatalog } from '@/features/ordering/api/getCatalog';
@@ -118,9 +118,16 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     const [rejectCustomReason, setRejectCustomReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    // Edit Order drawer state
+    // Edit Order drawer state (for initial confirmation)
     const [drawerItems, setDrawerItems] = useState<any[]>([]);
     const [menuSearchQuery, setMenuSearchQuery] = useState('');
+
+    // Add / Edit Active Order drawer state (for existing active orders)
+    const [showEditActiveDrawer, setShowEditActiveDrawer] = useState(false);
+    const [editingActiveOrder, setEditingActiveOrder] = useState<LiveOrder | null>(null);
+    const [editExistingItems, setEditExistingItems] = useState<any[]>([]);
+    const [newItemsToAdd, setNewItemsToAdd] = useState<any[]>([]);
+    const [editActiveSearchQuery, setEditActiveSearchQuery] = useState('');
 
     // Notification dropdown state
     const [showNotifications, setShowNotifications] = useState(false);
@@ -420,6 +427,115 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             fetchData();
         } else {
             alert(res.error || 'Failed to mark as served');
+        }
+        setSubmitting(false);
+    };
+
+    // Active Order Add/Edit handlers
+    const openEditActiveOrderDrawer = (order: LiveOrder) => {
+        setEditingActiveOrder(order);
+        setEditExistingItems((order.order_items || []).map(item => ({
+            id: item.id,
+            menu_item_id: item.menu_item_id,
+            qty: item.qty,
+            notes: item.notes || '',
+            price: item.price_at_order,
+            name: item.menu_items?.name || 'Item',
+            status: item.status
+        })));
+        setNewItemsToAdd([]);
+        setEditActiveSearchQuery('');
+        setShowEditActiveDrawer(true);
+    };
+
+    const handleUpdateExistingQty = async (index: number, newQty: number) => {
+        const item = editExistingItems[index];
+        if (!item) return;
+        
+        if (newQty <= 0) {
+            setSubmitting(true);
+            const res = await deleteOrderItem(item.id);
+            if (res.success) {
+                setEditExistingItems(editExistingItems.filter((_, idx) => idx !== index));
+                fetchData();
+            } else {
+                alert(res.error || 'Failed to delete item');
+            }
+            setSubmitting(false);
+        } else {
+            setSubmitting(true);
+            const res = await updateOrderItemQty(item.id, newQty);
+            if (res.success) {
+                setEditExistingItems(editExistingItems.map((it, idx) => idx === index ? { ...it, qty: newQty } : it));
+                fetchData();
+            } else {
+                alert(res.error || 'Failed to update item quantity');
+            }
+            setSubmitting(false);
+        }
+    };
+
+    const handleRemoveExistingItem = async (index: number) => {
+        const item = editExistingItems[index];
+        if (!item) return;
+        setSubmitting(true);
+        const res = await deleteOrderItem(item.id);
+        if (res.success) {
+            setEditExistingItems(editExistingItems.filter((_, idx) => idx !== index));
+            fetchData();
+        } else {
+            alert(res.error || 'Failed to delete item');
+        }
+        setSubmitting(false);
+    };
+
+    const handleUpdateNewItemQty = (index: number, newQty: number) => {
+        if (newQty <= 0) {
+            setNewItemsToAdd(newItemsToAdd.filter((_, idx) => idx !== index));
+        } else {
+            setNewItemsToAdd(newItemsToAdd.map((item, idx) => idx === index ? { ...item, qty: newQty } : item));
+        }
+    };
+
+    const handleAddNewItemToCart = (menuItem: any) => {
+        const existingIdx = newItemsToAdd.findIndex(i => i.menu_item_id === menuItem.id);
+        if (existingIdx >= 0) {
+            handleUpdateNewItemQty(existingIdx, newItemsToAdd[existingIdx].qty + 1);
+        } else {
+            setNewItemsToAdd([...newItemsToAdd, {
+                menu_item_id: menuItem.id,
+                qty: 1,
+                price: menuItem.price,
+                name: menuItem.name,
+                category_name: menuItem.categories?.name || 'Dish'
+            }]);
+        }
+    };
+
+    const submitAddNewItems = async () => {
+        if (!editingActiveOrder) return;
+        if (newItemsToAdd.length === 0) {
+            setShowEditActiveDrawer(false);
+            return;
+        }
+
+        setSubmitting(true);
+        const res = await addItemsToOrder(
+            editingActiveOrder.id,
+            activeUser.id,
+            newItemsToAdd.map(item => ({
+                menu_item_id: item.menu_item_id,
+                qty: item.qty,
+                price_at_order: item.price
+            }))
+        );
+
+        if (res.success) {
+            setShowEditActiveDrawer(false);
+            setNewItemsToAdd([]);
+            fetchData();
+        } else {
+            alert(res.error || 'Failed to add items to order');
         }
         setSubmitting(false);
     };
@@ -768,26 +884,37 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                                                             </ul>
                                                         </div>
 
-                                                        <div>
-                                                            <div className="flex justify-between items-center mb-3">
+                                                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                                                            <div className="flex justify-between items-center">
                                                                 <span className="text-xs font-bold text-gray-400">Total Bill</span>
                                                                 <span className="text-sm font-black text-[#4E1414]">₹{orderTotal}</span>
                                                             </div>
 
-                                                            {order.status === 'ready' || allReady ? (
-                                                                <button 
-                                                                    onClick={() => handleMarkServed(order.id)}
-                                                                    disabled={submitting}
-                                                                    className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <button
+                                                                    onClick={() => openEditActiveOrderDrawer(order)}
+                                                                    className="bg-[#C9974A] hover:bg-[#b8863b] text-[#4E1414] font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-xs active:scale-95"
                                                                 >
-                                                                    <CheckCircle2 className="w-4 h-4" />
-                                                                    Mark as Served
+                                                                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                                                                    + Add / Edit Food
                                                                 </button>
-                                                            ) : (
-                                                                <div className="text-center py-2 bg-gray-50 rounded-xl text-[10px] text-gray-400 italic font-bold">
-                                                                    Waiting on kitchen prep ({readyCount}/{order.order_items.length} ready)
-                                                                </div>
-                                                            )}
+
+                                                                {order.status === 'ready' || allReady ? (
+                                                                    <button 
+                                                                        onClick={() => handleMarkServed(order.id)}
+                                                                        disabled={submitting}
+                                                                        className="bg-green-700 hover:bg-green-800 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-sm disabled:opacity-50 active:scale-95"
+                                                                    >
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                        Mark Served
+                                                                    </button>
+                                                                ) : (
+                                                                    <div className="text-center py-2 bg-gray-100 rounded-xl text-[10px] text-gray-500 font-bold flex items-center justify-center gap-1">
+                                                                        <ChefHat className="w-3 h-3 text-orange-500 animate-pulse" />
+                                                                        Prep ({readyCount}/{order.order_items.length})
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );
@@ -1033,6 +1160,14 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                                                             </li>
                                                         ))}
                                                     </ul>
+
+                                                    <button
+                                                        onClick={() => openEditActiveOrderDrawer(order)}
+                                                        className="w-full mt-3.5 bg-[#C9974A]/20 hover:bg-[#C9974A] text-[#4E1414] font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                                                        + Add / Edit Food
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -1172,6 +1307,233 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                 </div>
             )}
 
+            {/* Bottom Add/Edit Active Order Drawer */}
+            {showEditActiveDrawer && editingActiveOrder && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center backdrop-blur-sm">
+                    <div className="bg-white rounded-t-3xl border-t border-[#C9974A]/30 w-full max-w-xl p-5 max-h-[90vh] overflow-y-auto flex flex-col justify-between shadow-2xl animate-slideUp">
+                        <div>
+                            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                                <div>
+                                    <span className="text-[10px] font-black tracking-widest text-[#C9974A] uppercase block">Add More Food / Edit KOT</span>
+                                    <h3 className="font-display font-black text-lg text-[#4E1414]">Table {editingActiveOrder.restaurant_tables?.table_no || '?'} · {editingActiveOrder.customer_name}</h3>
+                                </div>
+                                <button onClick={() => setShowEditActiveDrawer(false)} className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Existing Items in KOT */}
+                            <div className="mb-6">
+                                <h4 className="text-xs font-black uppercase text-[#4E1414] tracking-wider mb-2.5 flex items-center gap-1.5">
+                                    <ClipboardList className="w-4 h-4 text-[#C9974A]" /> Current Items (Already Sent to Kitchen)
+                                </h4>
+                                <div className="space-y-2 bg-gray-50/60 p-3 rounded-2xl border border-gray-100 max-h-48 overflow-y-auto">
+                                    {editExistingItems.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-2xs border border-gray-100">
+                                            <div className="flex-1 pr-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-xs text-[#241B15]">{item.name}</span>
+                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
+                                                        item.status === 'ready' ? 'bg-green-100 text-green-700' :
+                                                        item.status === 'preparing' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                        {item.status}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-gray-400">₹{item.price} each</span>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50/50">
+                                                    <button 
+                                                        onClick={() => handleUpdateExistingQty(idx, item.qty - 1)}
+                                                        disabled={submitting}
+                                                        className="px-2 py-1 text-[#4E1414] hover:bg-gray-200 rounded-l-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        <Minus className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <span className="px-2.5 text-xs font-black text-[#4E1414] min-w-[24px] text-center">{item.qty}</span>
+                                                    <button 
+                                                        onClick={() => handleUpdateExistingQty(idx, item.qty + 1)}
+                                                        disabled={submitting}
+                                                        className="px-2 py-1 text-[#4E1414] hover:bg-gray-200 rounded-r-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+
+                                                <button 
+                                                    onClick={() => handleRemoveExistingItem(idx)}
+                                                    disabled={submitting}
+                                                    className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50"
+                                                    title="Cancel / Remove Item"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {editExistingItems.length === 0 && (
+                                        <p className="text-center text-xs text-gray-400 italic py-2">No active items.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* New Items to Add Section */}
+                            {newItemsToAdd.length > 0 && (
+                                <div className="mb-6 bg-[#F6EEDF]/50 border-2 border-[#C9974A]/40 p-3.5 rounded-2xl animate-fadeIn">
+                                    <h4 className="text-xs font-black uppercase text-[#4E1414] tracking-wider mb-2.5 flex items-center justify-between">
+                                        <span className="flex items-center gap-1.5">
+                                            <Utensils className="w-4 h-4 text-[#C9974A]" /> New Items to Send ({newItemsToAdd.reduce((sum, i) => sum + i.qty, 0)})
+                                        </span>
+                                        <span className="text-[#C9974A] font-black text-sm">
+                                            +₹{newItemsToAdd.reduce((sum, i) => sum + (i.price * i.qty), 0)}
+                                        </span>
+                                    </h4>
+                                    <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                                        {newItemsToAdd.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-xs border border-[#C9974A]/20">
+                                                <div className="flex-1 pr-2">
+                                                    <span className="font-bold text-xs text-[#241B15] block">{item.name}</span>
+                                                    <span className="text-[10px] font-bold text-[#C9974A]">₹{item.price} each</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex items-center border border-[#C9974A]/30 rounded-lg bg-[#F6EEDF]/30">
+                                                        <button 
+                                                            onClick={() => handleUpdateNewItemQty(idx, item.qty - 1)}
+                                                            className="px-2 py-1 text-[#4E1414] hover:bg-[#C9974A]/20 rounded-l-lg"
+                                                        >
+                                                            <Minus className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <span className="px-2.5 text-xs font-black text-[#4E1414] min-w-[24px] text-center">{item.qty}</span>
+                                                        <button 
+                                                            onClick={() => handleUpdateNewItemQty(idx, item.qty + 1)}
+                                                            className="px-2 py-1 text-[#4E1414] hover:bg-[#C9974A]/20 rounded-r-lg"
+                                                        >
+                                                            <Plus className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setNewItemsToAdd(newItemsToAdd.filter((_, i) => i !== idx))}
+                                                        className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Search and Browse Menu */}
+                            <div className="border-t border-gray-100 pt-4">
+                                <h4 className="text-xs font-black uppercase text-[#4E1414] mb-2.5 tracking-wider flex items-center gap-1.5">
+                                    <Search className="w-4 h-4 text-[#C9974A]" /> Browse & Add Menu Items
+                                </h4>
+                                <div className="relative mb-3">
+                                    <input 
+                                        type="text"
+                                        placeholder="Search menu items or categories..."
+                                        value={editActiveSearchQuery}
+                                        onChange={e => setEditActiveSearchQuery(e.target.value)}
+                                        className="w-full text-xs px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-[#4E1414] focus:ring-1 focus:ring-[#4E1414] pl-9 bg-gray-50/50 font-medium"
+                                    />
+                                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                                    {editActiveSearchQuery && (
+                                        <button onClick={() => setEditActiveSearchQuery('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 p-0.5">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Categories & Items Scroll */}
+                                <div className="bg-gray-50/60 rounded-2xl border border-gray-100 max-h-52 overflow-y-auto divide-y divide-gray-100">
+                                    {posCatalog?.categories?.map((cat: any) => {
+                                        const catItems = posCatalog.menuItems.filter((m: any) => 
+                                            m.category_id === cat.id && 
+                                            (m.name.toLowerCase().includes(editActiveSearchQuery.toLowerCase()) ||
+                                             cat.name.toLowerCase().includes(editActiveSearchQuery.toLowerCase()))
+                                        );
+                                        if (catItems.length === 0) return null;
+
+                                        return (
+                                            <div key={cat.id} className="pb-1">
+                                                <div className="bg-gray-100/80 px-3 py-1.5 sticky top-0 z-10 border-b border-gray-200/60 flex justify-between items-center">
+                                                    <span className="text-[10px] font-black uppercase text-[#4E1414] tracking-wider">{cat.name}</span>
+                                                    <span className="text-[9px] font-bold text-gray-500">{catItems.length} items</span>
+                                                </div>
+                                                <div className="divide-y divide-gray-100">
+                                                    {catItems.map((item: any) => {
+                                                        const addedCount = newItemsToAdd.find(i => i.menu_item_id === item.id)?.qty || 0;
+                                                        return (
+                                                            <div 
+                                                                key={item.id}
+                                                                onClick={() => handleAddNewItemToCart(item)}
+                                                                className="px-3.5 py-2 hover:bg-[#F6EEDF]/40 cursor-pointer flex justify-between items-center transition-colors"
+                                                            >
+                                                                <div>
+                                                                    <p className="font-bold text-xs text-[#241B15]">{item.name}</p>
+                                                                    <p className="text-[11px] font-black text-[#C9974A]">₹{item.price}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {addedCount > 0 && (
+                                                                        <span className="bg-[#4E1414] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                                            +{addedCount} added
+                                                                        </span>
+                                                                    )}
+                                                                    <button className="bg-[#4E1414] text-[#F6EEDF] hover:bg-[#350C0C] w-7 h-7 rounded-lg flex items-center justify-center shadow-xs transition-transform active:scale-90">
+                                                                        <Plus className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {(!posCatalog || posCatalog?.menuItems?.filter((m: any) => m.name.toLowerCase().includes(editActiveSearchQuery.toLowerCase())).length === 0) && (
+                                        <div className="p-6 text-center text-xs text-gray-400 italic">
+                                            No menu items found.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center gap-3 shrink-0">
+                            <div>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Updated Total Bill</span>
+                                <span className="text-lg font-black text-[#4E1414]">
+                                    ₹{editExistingItems.reduce((acc, i) => acc + (i.price * i.qty), 0) + newItemsToAdd.reduce((acc, i) => acc + (i.price * i.qty), 0)}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowEditActiveDrawer(false)}
+                                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold text-xs hover:bg-gray-50 transition-colors"
+                                >
+                                    Done
+                                </button>
+                                {newItemsToAdd.length > 0 && (
+                                    <button 
+                                        onClick={submitAddNewItems}
+                                        disabled={submitting}
+                                        className="bg-[#4E1414] hover:bg-[#350C0C] text-[#F6EEDF] font-bold px-6 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all active:scale-95"
+                                    >
+                                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                        Send {newItemsToAdd.reduce((sum, i) => sum + i.qty, 0)} New Items to Kitchen
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Reject Reason Picker Modal */}
             {showRejectModal && selectedOrder && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1245,7 +1607,19 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                             {selectedTable.orders.map((order: any, idx: number) => (
                                 <div key={order.id} className="pt-3 first:pt-0">
                                     <div className="flex justify-between items-center mb-1.5">
-                                        <span className="text-[10px] text-gray-400 font-bold uppercase">Order KOT</span>
+                                        <span className="text-[10px] text-gray-400 font-bold uppercase flex items-center gap-2">
+                                            Order KOT
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedTable(null);
+                                                    openEditActiveOrderDrawer(order);
+                                                }}
+                                                className="bg-[#C9974A] hover:bg-[#b8863b] text-[#4E1414] text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors shadow-2xs"
+                                            >
+                                                <Plus className="w-3 h-3 stroke-[2.5]" />
+                                                + Add / Edit
+                                            </button>
+                                        </span>
                                         <span className={`text-[9px] font-black px-2 py-0.5 rounded ${
                                             order.status === 'ready' ? 'bg-green-100 text-green-700' :
                                             order.status === 'served' ? 'bg-teal-100 text-teal-800' :
@@ -1257,7 +1631,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                                     <ul className="space-y-1">
                                         {order.order_items.map((item: any, idy: number) => (
                                             <li key={idy} className="flex justify-between text-xs text-gray-700 font-medium">
-                                                <span>{item.qty}x {item.menu_items?.name}</span>
+                                                <span><b className="text-[#4E1414] mr-1">{item.qty}x</b> {item.menu_items?.name}</span>
                                                 <span className="text-gray-400">₹{item.price_at_order * item.qty}</span>
                                             </li>
                                         ))}
@@ -1266,23 +1640,39 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                             ))}
                         </div>
 
-                        <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
-                            <div>
-                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Total accumulated bill</span>
-                                <span className="text-base font-black text-[#4E1414]">
-                                    ₹{selectedTable.orders.reduce((sum: number, o: any) => sum + o.order_items.reduce((s: number, i: any) => s + (i.price_at_order * i.qty), 0), 0)}
-                                </span>
+                        <div className="border-t border-gray-100 pt-3 space-y-3">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Total accumulated bill</span>
+                                    <span className="text-base font-black text-[#4E1414]">
+                                        ₹{selectedTable.orders.reduce((sum: number, o: any) => sum + o.order_items.reduce((s: number, i: any) => s + (i.price_at_order * i.qty), 0), 0)}
+                                    </span>
+                                </div>
+
+                                {selectedTable.status === 'Needs Bill' && (
+                                    <button 
+                                        onClick={() => handleSendTableToCashier(selectedTable.id)}
+                                        disabled={submitting}
+                                        className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors"
+                                    >
+                                        Send to Cashier
+                                    </button>
+                                )}
                             </div>
 
-                            {selectedTable.status === 'Needs Bill' && (
-                                <button 
-                                    onClick={() => handleSendTableToCashier(selectedTable.id)}
-                                    disabled={submitting}
-                                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors"
-                                >
-                                    Send to Cashier
-                                </button>
-                            )}
+                            <button
+                                onClick={() => {
+                                    const activeOrder = selectedTable.orders.find((o: any) => ['confirmed', 'preparing', 'ready', 'served'].includes(o.status)) || selectedTable.orders[0];
+                                    if (activeOrder) {
+                                        setSelectedTable(null);
+                                        openEditActiveOrderDrawer(activeOrder);
+                                    }
+                                }}
+                                className="w-full bg-[#C9974A] hover:bg-[#b8863b] text-[#4E1414] font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                            >
+                                <Plus className="w-4 h-4 stroke-[2.5]" />
+                                + Add More Food to Table {selectedTable.table_no}
+                            </button>
                         </div>
                     </div>
                 </div>
