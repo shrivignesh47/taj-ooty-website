@@ -226,150 +226,119 @@ CREATE TABLE IF NOT EXISTS "public"."staff_users" (
 
 ALTER TABLE "public"."staff_users" OWNER TO "postgres";
 
-
-ALTER TABLE ONLY "public"."bills"
-    ADD CONSTRAINT "bills_order_id_key" UNIQUE ("order_id");
-
-
-
-ALTER TABLE ONLY "public"."bills"
-    ADD CONSTRAINT "bills_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."categories"
-    ADD CONSTRAINT "categories_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."menu_items"
-    ADD CONSTRAINT "menu_items_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."order_items"
-    ADD CONSTRAINT "order_items_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."order_status_history"
-    ADD CONSTRAINT "order_status_history_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."orders"
-    ADD CONSTRAINT "orders_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."permissions"
-    ADD CONSTRAINT "permissions_key_key" UNIQUE ("key");
-
-
-
-ALTER TABLE ONLY "public"."permissions"
-    ADD CONSTRAINT "permissions_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."restaurant_tables"
-    ADD CONSTRAINT "restaurant_tables_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."restaurant_tables"
-    ADD CONSTRAINT "restaurant_tables_table_no_key" UNIQUE ("table_no");
-
-
-
-ALTER TABLE ONLY "public"."role_permissions"
-    ADD CONSTRAINT "role_permissions_pkey" PRIMARY KEY ("role_id", "permission_id");
-
-
-
-ALTER TABLE ONLY "public"."roles"
-    ADD CONSTRAINT "roles_name_key" UNIQUE ("name");
-
-
-
-ALTER TABLE ONLY "public"."roles"
-    ADD CONSTRAINT "roles_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."staff_users"
-    ADD CONSTRAINT "staff_users_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."bills"
-    ADD CONSTRAINT "bills_cashier_id_fkey" FOREIGN KEY ("cashier_id") REFERENCES "public"."staff_users"("id");
-
-
-
-ALTER TABLE ONLY "public"."bills"
-    ADD CONSTRAINT "bills_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id");
-
-
-
-ALTER TABLE ONLY "public"."menu_items"
-    ADD CONSTRAINT "menu_items_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."order_items"
-    ADD CONSTRAINT "order_items_menu_item_id_fkey" FOREIGN KEY ("menu_item_id") REFERENCES "public"."menu_items"("id");
-
-
-
-ALTER TABLE ONLY "public"."order_items"
-    ADD CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."order_status_history"
-    ADD CONSTRAINT "order_status_history_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "public"."staff_users"("id");
-
-
-
-ALTER TABLE ONLY "public"."order_status_history"
-    ADD CONSTRAINT "order_status_history_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."orders"
-    ADD CONSTRAINT "orders_table_id_fkey" FOREIGN KEY ("table_id") REFERENCES "public"."restaurant_tables"("id");
-
-
-
-ALTER TABLE ONLY "public"."orders"
-    ADD CONSTRAINT "orders_waiter_id_fkey" FOREIGN KEY ("waiter_id") REFERENCES "public"."staff_users"("id");
-
-
-
-ALTER TABLE ONLY "public"."restaurant_tables"
-    ADD CONSTRAINT "restaurant_tables_assigned_waiter_id_fkey" FOREIGN KEY ("assigned_waiter_id") REFERENCES "public"."staff_users"("id");
-
-
-
-ALTER TABLE ONLY "public"."role_permissions"
-    ADD CONSTRAINT "role_permissions_permission_id_fkey" FOREIGN KEY ("permission_id") REFERENCES "public"."permissions"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."role_permissions"
-    ADD CONSTRAINT "role_permissions_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."staff_users"
-    ADD CONSTRAINT "staff_users_auth_id_fkey" FOREIGN KEY ("auth_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."staff_users"
-    ADD CONSTRAINT "staff_users_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id");
-
+DO $$
+BEGIN
+    -- bills
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.bills'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.bills
+            ADD CONSTRAINT bills_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- categories
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.categories'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.categories
+            ADD CONSTRAINT categories_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- menu_items
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.menu_items'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.menu_items
+            ADD CONSTRAINT menu_items_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- order_items
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.order_items'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.order_items
+            ADD CONSTRAINT order_items_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- order_status_history
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.order_status_history'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.order_status_history
+            ADD CONSTRAINT order_status_history_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- orders
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.orders'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.orders
+            ADD CONSTRAINT orders_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- permissions
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.permissions'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.permissions
+            ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- restaurant_tables
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.restaurant_tables'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.restaurant_tables
+            ADD CONSTRAINT restaurant_tables_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- role_permissions
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.role_permissions'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.role_permissions
+            ADD CONSTRAINT role_permissions_pkey
+            PRIMARY KEY (role_id, permission_id);
+    END IF;
+
+    -- roles
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.roles'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.roles
+            ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+    END IF;
+
+    -- staff_users
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.staff_users'::regclass
+          AND contype = 'p'
+    ) THEN
+        ALTER TABLE ONLY public.staff_users
+            ADD CONSTRAINT staff_users_pkey PRIMARY KEY (id);
+    END IF;
+END $$;
 
 
 ALTER TABLE "public"."bills" ENABLE ROW LEVEL SECURITY;
@@ -393,26 +362,32 @@ ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."permissions" ENABLE ROW LEVEL SECURITY;
 
 
+DROP POLICY IF EXISTS "public can add order items on creation" ON "public"."order_items";
 CREATE POLICY "public can add order items on creation" ON "public"."order_items" FOR INSERT WITH CHECK (true);
 
 
 
+DROP POLICY IF EXISTS "public can create orders" ON "public"."orders";
 CREATE POLICY "public can create orders" ON "public"."orders" FOR INSERT WITH CHECK (true);
 
 
 
+DROP POLICY IF EXISTS "public can view available menu items" ON "public"."menu_items";
 CREATE POLICY "public can view available menu items" ON "public"."menu_items" FOR SELECT USING (("is_available" = true));
 
 
 
+DROP POLICY IF EXISTS "public can view categories" ON "public"."categories";
 CREATE POLICY "public can view categories" ON "public"."categories" FOR SELECT USING (true);
 
 
 
+DROP POLICY IF EXISTS "public can view order items" ON "public"."order_items";
 CREATE POLICY "public can view order items" ON "public"."order_items" FOR SELECT USING (true);
 
 
 
+DROP POLICY IF EXISTS "public can view own order by id" ON "public"."orders";
 CREATE POLICY "public can view own order by id" ON "public"."orders" FOR SELECT USING (true);
 
 
@@ -426,28 +401,36 @@ ALTER TABLE "public"."role_permissions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."roles" ENABLE ROW LEVEL SECURITY;
 
 
+DROP POLICY IF EXISTS "staff with edit_menu can manage menu" ON "public"."menu_items";
 CREATE POLICY "staff with edit_menu can manage menu" ON "public"."menu_items" USING ("public"."has_permission"('edit_menu'::"text"));
 
 
 
+DROP POLICY IF EXISTS "staff with edit_orders can update orders" ON "public"."orders";
 CREATE POLICY "staff with edit_orders can update orders" ON "public"."orders" FOR UPDATE USING (("public"."has_permission"('edit_orders'::"text") OR "public"."has_permission"('confirm_orders'::"text")));
 
 
 
+DROP POLICY IF EXISTS "staff with generate_bills can manage bills" ON "public"."bills";
 CREATE POLICY "staff with generate_bills can manage bills" ON "public"."bills" USING (("public"."has_permission"('generate_bills'::"text") OR "public"."has_permission"('view_billing'::"text")));
 
 
 
+DROP POLICY IF EXISTS "staff with manage_roles can manage roles" ON "public"."roles";
 CREATE POLICY "staff with manage_roles can manage roles" ON "public"."roles" USING ("public"."has_permission"('manage_roles'::"text"));
+DROP POLICY IF EXISTS "authenticated users can view roles" ON "public"."roles";
 CREATE POLICY "authenticated users can view roles" ON "public"."roles" FOR SELECT TO authenticated USING (true);
 
 
 
+DROP POLICY IF EXISTS "staff with manage_staff can manage staff" ON "public"."staff_users";
 CREATE POLICY "staff with manage_staff can manage staff" ON "public"."staff_users" USING ("public"."has_permission"('manage_staff'::"text"));
+DROP POLICY IF EXISTS "staff users can view their own profile" ON "public"."staff_users";
 CREATE POLICY "staff users can view their own profile" ON "public"."staff_users" FOR SELECT TO authenticated USING (auth_id = auth.uid());
 
 
 
+DROP POLICY IF EXISTS "staff with view_orders can view all orders" ON "public"."orders";
 CREATE POLICY "staff with view_orders can view all orders" ON "public"."orders" FOR SELECT USING ("public"."has_permission"('view_orders'::"text"));
 
 
@@ -627,8 +610,6 @@ GRANT ALL ON FUNCTION "public"."has_permission"("perm_key" "text") TO "service_r
 GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "anon";
 GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "service_role";
-
-
 
 
 
