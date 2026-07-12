@@ -25,7 +25,12 @@ async function requireStaffIdentity() {
     return { staff };
 }
 
-async function logOrderStatus(orderId: string, status: string, changedBy: string) {
+
+async function logOrderStatus(
+    orderId: string,
+    status: string,
+    changedBy: string
+) {
     const { error } = await supabaseAdmin
         .from('order_status_history')
         .insert([{
@@ -34,18 +39,23 @@ async function logOrderStatus(orderId: string, status: string, changedBy: string
             changed_by: changedBy
         }]);
 
-    await supabaseAdmin
-        .from('staff_activity_log')
-        .insert([{
-            staff_id: changedBy,
-            action: `ORDER_${status.toUpperCase()}`,
-            details: { order_id: orderId, status }
-        }]).catch(() => {});
+    try {
+        await supabaseAdmin
+            .from('staff_activity_log')
+            .insert([{
+                staff_id: changedBy,
+                action: `ORDER_${status.toUpperCase()}`,
+                details: { order_id: orderId, status }
+            }]);
+    } catch (activityError) {
+        console.error('Failed to log staff activity', activityError);
+    }
 
     if (error) {
         console.error('Failed to log order history', error);
     }
 }
+
 
 export async function advanceOrderStatus(orderId: string, newStatus: string) {
     const identity = await requireStaffIdentity();
