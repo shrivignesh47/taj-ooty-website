@@ -11,8 +11,8 @@ export default async function WaiterOrdersPage() {
         redirect('/staff/login');
     }
 
-    const isAdmin = auth.user.roleName.toLowerCase() === 'admin';
-    const hasAccess = isAdmin || auth.user.permissions.some(p => [
+    // Check permissions only — admin has all permissions via verifyStaff()
+    const hasAccess = auth.user.permissions.some(p => [
         'view_orders', 'confirm_orders', 'edit_orders', 'manage_tables',
         'view_kitchen_queue', 'update_prep_status', 'view_billing', 'generate_bills'
     ].includes(p));

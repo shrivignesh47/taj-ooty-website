@@ -91,9 +91,9 @@ function ElapsedTimer({ createdAt }: { createdAt: string }) {
 export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?: MenuCatalog }) {
     const [userPermissions, setUserPermissions] = useState<string[]>(activeUser.permissions || []);
     const [tab, setTab] = useState<'incoming' | 'tables' | 'history' | 'kitchen' | 'settings'>(() => {
-        const isAdmin = activeUser.roleName?.toLowerCase() === 'admin';
-        const hasConfirm = isAdmin || activeUser.permissions?.includes('confirm_orders');
-        const hasView = isAdmin || activeUser.permissions?.includes('view_orders');
+        // permissions array already has all perms for admin via verifyStaff()
+        const hasConfirm = activeUser.permissions?.includes('confirm_orders');
+        const hasView = activeUser.permissions?.includes('view_orders');
         return hasConfirm ? 'incoming' : (hasView ? 'tables' : 'settings');
     });
 
@@ -209,21 +209,19 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                 const newPerms = res.user.permissions || [];
                 setUserPermissions(newPerms);
 
-                const isAdmin = activeUser.roleName?.toLowerCase() === 'admin';
-                if (!isAdmin) {
-                    setTab(currentTab => {
-                        if (currentTab === 'kitchen' && !newPerms.includes('view_kitchen_queue')) {
-                            const hasConfirm = newPerms.includes('confirm_orders');
-                            const hasView = newPerms.includes('view_orders');
-                            return hasConfirm ? 'incoming' : (hasView ? 'tables' : 'settings');
-                        }
-                        if (currentTab === 'incoming' && !newPerms.includes('confirm_orders')) {
-                            const hasView = newPerms.includes('view_orders');
-                            return hasView ? 'tables' : 'settings';
-                        }
-                        return currentTab;
-                    });
-                }
+                // permissions array already has all perms for admin via verifyStaff()
+                setTab(currentTab => {
+                    if (currentTab === 'kitchen' && !newPerms.includes('view_kitchen_queue')) {
+                        const hasConfirm = newPerms.includes('confirm_orders');
+                        const hasView = newPerms.includes('view_orders');
+                        return hasConfirm ? 'incoming' : (hasView ? 'tables' : 'settings');
+                    }
+                    if (currentTab === 'incoming' && !newPerms.includes('confirm_orders')) {
+                        const hasView = newPerms.includes('view_orders');
+                        return hasView ? 'tables' : 'settings';
+                    }
+                    return currentTab;
+                });
             }
         };
 

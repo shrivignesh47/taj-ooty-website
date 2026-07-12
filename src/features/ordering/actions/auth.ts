@@ -81,32 +81,77 @@ export async function loginStaff(formData: FormData) {
             return { error: error.message };
         }
 
-        // Role-based routing directly post-login to skip the dashboard hub for specific roles
+        // Permission-based routing — honour admin's role assignments, not hardcoded role names
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { data: staffMember } = await supabaseAdminEdge
                 .from('staff_users')
-                .select('id, roles(name)')
+                .select(`
+                    id,
+                    roles (
+                        name,
+                        role_permissions (
+                            permissions ( key )
+                        )
+                    )
+                `)
                 .eq('auth_id', user.id)
                 .single();
 
-            const roleName = (staffMember?.roles as any)?.name?.toLowerCase();
+            const roleData: any = staffMember?.roles;
+            const roleName = roleData?.name?.toLowerCase() ?? '';
+            const permSet = new Set<string>();
 
-            if (staffMember?.id) {
-                await supabaseAdminEdge.from('staff_activity_log').insert({
-                    staff_id: staffMember.id,
-                    action: 'LOGIN',
-                    details: { method: 'password', role: roleName }
+            if (roleName === 'admin') {
+                // Admin gets all permissions
+                const { data: allPerms } = await supabaseAdminEdge.from('permissions').select('key');
+                allPerms?.forEach(p => permSet.add(p.key));
+            } else if (roleData?.role_permissions) {
+                roleData.role_permissions.forEach((rp: any) => {
+                    if (rp.permissions?.key) permSet.add(rp.permissions.key);
                 });
             }
 
-            if (roleName === 'admin') return { success: true, redirectUrl: '/staff/admin' };
-            if (roleName === 'waiter') return { success: true, redirectUrl: '/staff/orders' };
-            if (roleName === 'kitchen') return { success: true, redirectUrl: '/staff/kitchen' };
-            if (roleName === 'cashier') return { success: true, redirectUrl: '/staff/billing' };
+            if (staffMember?.id) {
+                try {
+                    await supabaseAdminEdge.from('staff_activity_log').insert({
+                        staff_id: staffMember.id,
+                        action: 'LOGIN',
+                        details: { method: 'password', role: roleName }
+                    });
+                } catch { /* non-critical log failure */ }
+            }
+
+            // Route by role name first (direct match)
+            if (roleName === 'admin') {
+                return { success: true, redirectUrl: '/staff/admin' };
+            }
+            if (roleName === 'cashier') {
+                return { success: true, redirectUrl: '/staff/billing' };
+            }
+            if (roleName === 'waiter') {
+                return { success: true, redirectUrl: '/staff/orders' };
+            }
+            if (roleName === 'kitchen') {
+                return { success: true, redirectUrl: '/staff/kitchen' };
+            }
+
+            // Fallback to permission-based routing
+            if (permSet.has('manage_staff') || permSet.has('view_revenue') || permSet.has('manage_roles')) {
+                return { success: true, redirectUrl: '/staff/admin' };
+            }
+            if (permSet.has('view_kitchen_queue') || permSet.has('update_prep_status')) {
+                return { success: true, redirectUrl: '/staff/kitchen' };
+            }
+            if (permSet.has('view_billing') || permSet.has('generate_bills')) {
+                return { success: true, redirectUrl: '/staff/billing' };
+            }
+            if (permSet.has('view_orders') || permSet.has('confirm_orders') || permSet.has('edit_orders')) {
+                return { success: true, redirectUrl: '/staff/orders' };
+            }
         }
 
-        return { success: true, redirectUrl: '/staff/dashboard' };
+        return { success: true, redirectUrl: '/staff/billing' }; // Changed default to billing/orders rather than station hub
     } catch (e: any) {
         return { error: e.message || 'Internal error during login' };
     }

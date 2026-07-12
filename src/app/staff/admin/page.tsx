@@ -11,8 +11,11 @@ export default async function AdminDashboardPage() {
         redirect('/staff/login');
     }
 
-    const isAdmin = auth.user.roleName.toLowerCase() === 'admin';
-    const hasAccess = isAdmin || auth.user.permissions.some(p => ['manage_staff', 'view_revenue', 'manage_roles'].includes(p));
+    // Check permissions only — admin has all permissions via verifyStaff()
+    const hasAccess = auth.user.permissions.some(p => [
+        'manage_staff', 'view_revenue', 'manage_roles', 'edit_menu',
+        'view_dashboard', 'view_activity_log', 'manage_orders'
+    ].includes(p));
     if (!hasAccess) {
         redirect('/staff/dashboard');
     }

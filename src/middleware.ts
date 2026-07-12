@@ -51,24 +51,57 @@ export async function middleware(request: NextRequest) {
         }
 
         if (user && isLoginRoute) {
-            // Already logged in, redirect them to their specific role dashboard
-
+            // Already logged in — redirect to the most relevant page based on permissions
             const supabaseAdminEdge = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.SUPABASE_SERVICE_ROLE_KEY!
             );
             const { data: staffMember } = await supabaseAdminEdge
                 .from('staff_users')
-                .select('roles(name)')
+                .select(`
+                    roles (
+                        name,
+                        role_permissions (
+                            permissions ( key )
+                        )
+                    )
+                `)
                 .eq('auth_id', user.id)
                 .single();
 
-            const roleName = (staffMember?.roles as any)?.name?.toLowerCase();
-            let dest = '/staff/dashboard'; // fallback
-            if (roleName === 'admin') dest = '/staff/admin';
-            else if (roleName === 'waiter') dest = '/staff/orders';
-            else if (roleName === 'kitchen') dest = '/staff/kitchen';
-            else if (roleName === 'cashier') dest = '/staff/billing';
+            const roleData: any = (staffMember as any)?.roles;
+            const roleName = roleData?.name?.toLowerCase() ?? '';
+            const permSet = new Set<string>();
+
+            if (roleName === 'admin') {
+                // Short-circuit: admin always goes to admin
+                return NextResponse.redirect(new URL('/staff/admin', request.url));
+            }
+
+            if (roleData?.role_permissions) {
+                roleData.role_permissions.forEach((rp: any) => {
+                    if (rp.permissions?.key) permSet.add(rp.permissions.key);
+                });
+            }
+
+            let dest = '/staff/billing'; // Changed default to billing/orders rather than station hub
+            if (roleName === 'admin') {
+                dest = '/staff/admin';
+            } else if (roleName === 'cashier') {
+                dest = '/staff/billing';
+            } else if (roleName === 'waiter') {
+                dest = '/staff/orders';
+            } else if (roleName === 'kitchen') {
+                dest = '/staff/kitchen';
+            } else if (permSet.has('manage_staff') || permSet.has('view_revenue') || permSet.has('manage_roles')) {
+                dest = '/staff/admin';
+            } else if (permSet.has('view_kitchen_queue') || permSet.has('update_prep_status')) {
+                dest = '/staff/kitchen';
+            } else if (permSet.has('view_billing') || permSet.has('generate_bills')) {
+                dest = '/staff/billing';
+            } else if (permSet.has('view_orders') || permSet.has('confirm_orders') || permSet.has('edit_orders')) {
+                dest = '/staff/orders';
+            }
 
             return NextResponse.redirect(new URL(dest, request.url));
         }

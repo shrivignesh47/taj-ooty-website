@@ -236,23 +236,26 @@ export function AdminDash() {
 
     const hasPerm = useCallback((requiredPerm: string) => {
         if (!activeUser) return false;
-        if (activeUser.roleName === 'admin') return true;
-        return activeUser.permissions?.includes(requiredPerm);
+        // Admin role always has full access to all admin tabs
+        if (activeUser.roleName?.toLowerCase() === 'admin') return true;
+        return activeUser.permissions?.includes(requiredPerm) ?? false;
     }, [activeUser]);
 
     const permittedTabs = useMemo(() => NAV_TABS.filter(t => {
         switch (t.id) {
-            case 'Overview': return hasPerm('view_dashboard');
-            case 'Orders': return hasPerm('manage_orders');
-            case 'Tables': return hasPerm('manage_orders');
-            case 'Menu': return hasPerm('edit_menu');
-            case 'Staff': return hasPerm('manage_staff');
-            case 'Roles': return hasPerm('manage_roles');
-            case 'Customers': return hasPerm('view_revenue');
-            case 'Analytics': return hasPerm('view_revenue');
-            case 'Activity': return hasPerm('view_activity_log');
-            case 'Settings': return hasPerm('manage_staff');
-            default: return true;
+            // Fallback to manage_staff for keys that may not exist in the permissions table
+            case 'Overview':  return hasPerm('view_dashboard')  || hasPerm('manage_staff') || hasPerm('view_revenue');
+            case 'Orders':    return hasPerm('manage_orders')   || hasPerm('view_orders')  || hasPerm('view_revenue') || hasPerm('manage_staff');
+            case 'Tables':    return hasPerm('manage_orders')   || hasPerm('manage_tables')|| hasPerm('manage_staff');
+            case 'Menu':      return hasPerm('edit_menu');
+            case 'Staff':     return hasPerm('manage_staff');
+            case 'Roles':     return hasPerm('manage_roles');
+            case 'Customers': return hasPerm('view_revenue')    || hasPerm('manage_staff');
+            case 'Analytics': return hasPerm('view_revenue')    || hasPerm('manage_staff');
+            case 'Activity':  return hasPerm('view_activity_log')|| hasPerm('manage_staff');
+            case 'Export':    return hasPerm('view_revenue')    || hasPerm('manage_staff');
+            case 'Settings':  return hasPerm('manage_staff')    || hasPerm('manage_roles');
+            default:          return true;
         }
     }), [hasPerm]);
 

@@ -32,7 +32,12 @@ export function AdminRoles({ roles, permissions, staff, onRolesUpdated }: Props)
         'manage_roles': 'Manage Roles',
         'view_revenue': 'View Revenue & Analytics',
         'export_data': 'Export Data (Excel)',
-        'manage_tables': 'Manage Tables'
+        'manage_tables': 'Manage Tables',
+        'manage_gst': 'Manage GST Configurations',
+        'view_reports': 'View POS Shift Reports',
+        'manage_inventory': 'Toggle Menu Inventory Stock',
+        'manage_expenses': 'Manage Petty Cash Expenses',
+        'manage_cash_drawer': 'Manage Cash Register Drawer'
     };
 
     const getAssignedCount = (roleId: string) => staff.filter(s => s.role_id === roleId && s.is_active).length;
@@ -44,7 +49,13 @@ export function AdminRoles({ roles, permissions, staff, onRolesUpdated }: Props)
     };
 
     const openEditModal = (r: any) => {
-        const assignedIds = (r.role_permissions || []).map((rp: any) => rp.permissions?.id).filter(Boolean);
+        const assignedIds = (r.role_permissions || []).map((rp: any) => {
+            if (!rp.permissions) return null;
+            if (Array.isArray(rp.permissions)) {
+                return rp.permissions[0]?.id;
+            }
+            return rp.permissions.id;
+        }).filter(Boolean);
         setForm({ id: r.id, name: r.name, permissionIds: assignedIds });
         setModalMode('edit');
         setShowModal(true);
@@ -109,7 +120,13 @@ export function AdminRoles({ roles, permissions, staff, onRolesUpdated }: Props)
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {roles.map(r => {
                     const assignedUsers = getAssignedCount(r.id);
-                    const perms = r.role_permissions?.map((rp: any) => rp.permissions?.key).filter(Boolean) || [];
+                    const perms = r.role_permissions?.map((rp: any) => {
+                        if (!rp.permissions) return null;
+                        if (Array.isArray(rp.permissions)) {
+                            return rp.permissions[0]?.key;
+                        }
+                        return rp.permissions.key;
+                    }).filter(Boolean) || [];
 
                     return (
                         <div key={r.id} className="bg-white rounded-2xl shadow-sm border border-[#C9974A]/20 hover:border-[#C9974A]/50 transition-colors flex flex-col overflow-hidden">

@@ -114,7 +114,12 @@ function printQR(tableId: string, tableNo: number) {
     printWindow.document.close();
 }
 
-export function AdminTablesLive() {
+interface AdminTablesLiveProps {
+    onTableClick?: (table: any) => void;
+    readOnly?: boolean;
+}
+
+export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesLiveProps) {
     const [tables, setTables] = useState<EnrichedTable[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<EnrichedTable | null>(null);
@@ -254,30 +259,32 @@ export function AdminTablesLive() {
             </div>
 
             {/* Add table */}
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-[#C9974A]/20 shadow-sm">
-                <div>
-                    <h3 className="text-[#4E1414] font-black text-lg">Table Overview</h3>
-                    <p className="text-[#241B15]/60 text-sm mt-1">Manage physical tables and QR codes.</p>
+            {!readOnly && (
+                <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-[#C9974A]/20 shadow-sm">
+                    <div>
+                        <h3 className="text-[#4E1414] font-black text-lg">Table Overview</h3>
+                        <p className="text-[#241B15]/60 text-sm mt-1">Manage physical tables and QR codes.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleDownloadAllQRs}
+                            disabled={creating || tables.length === 0}
+                            className="flex items-center gap-2 bg-[#F6EEDF] border border-[#C9974A]/40 text-[#4E1414] px-4 py-2 rounded-xl font-bold hover:bg-[#e6dbcc] transition-colors disabled:opacity-50"
+                        >
+                            <Download className="w-4 h-4" />
+                            {creating ? 'Zipping...' : 'Bulk Zip QRs'}
+                        </button>
+                        <button
+                            onClick={handleAddTable}
+                            disabled={creating}
+                            className="flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-5 py-2 rounded-xl font-bold shadow hover:bg-[#350C0C] transition-colors disabled:opacity-50"
+                        >
+                            <Plus className="w-4 h-4 text-[#C9974A]" />
+                            Add New Table
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleDownloadAllQRs}
-                        disabled={creating || tables.length === 0}
-                        className="flex items-center gap-2 bg-[#F6EEDF] border border-[#C9974A]/40 text-[#4E1414] px-4 py-2 rounded-xl font-bold hover:bg-[#e6dbcc] transition-colors disabled:opacity-50"
-                    >
-                        <Download className="w-4 h-4" />
-                        {creating ? 'Zipping...' : 'Bulk Zip QRs'}
-                    </button>
-                    <button
-                        onClick={handleAddTable}
-                        disabled={creating}
-                        className="flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-5 py-2 rounded-xl font-bold shadow hover:bg-[#350C0C] transition-colors disabled:opacity-50"
-                    >
-                        <Plus className="w-4 h-4 text-[#C9974A]" />
-                        Add New Table
-                    </button>
-                </div>
-            </div>
+            )}
 
             {/* Table grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -287,7 +294,13 @@ export function AdminTablesLive() {
                         <div
                             key={t.id}
                             className={`bg-white rounded-2xl border-2 ${sc.card} p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
-                            onClick={() => setSelected(t)}
+                            onClick={() => {
+                                if (onTableClick) {
+                                    onTableClick(t);
+                                } else {
+                                    setSelected(t);
+                                }
+                            }}
                         >
                             <div className="flex justify-between items-center">
                                 <span className="text-2xl font-black text-[#4E1414]">T-{t.table_no}</span>
@@ -310,20 +323,22 @@ export function AdminTablesLive() {
                                 </div>
                             )}
 
-                            <div className="flex gap-2 mt-auto pt-2 border-t border-[#F6EEDF]" onClick={e => e.stopPropagation()}>
-                                <button
-                                    onClick={() => setShowQR(t)}
-                                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-3 bg-[#F6EEDF] text-[#4E1414] rounded-lg hover:bg-[#e4d7be] transition-colors"
-                                >
-                                    <QrCode className="w-3.5 h-3.5" /> QR Code
-                                </button>
-                                <button
-                                    onClick={() => setConfirmDelete(t.id)}
-                                    className="flex items-center justify-center p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors outline outline-1 outline-red-200"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
+                            {!readOnly && (
+                                <div className="flex gap-2 mt-auto pt-2 border-t border-[#F6EEDF]" onClick={e => e.stopPropagation()}>
+                                    <button
+                                        onClick={() => setShowQR(t)}
+                                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-3 bg-[#F6EEDF] text-[#4E1414] rounded-lg hover:bg-[#e4d7be] transition-colors"
+                                    >
+                                        <QrCode className="w-3.5 h-3.5" /> QR Code
+                                    </button>
+                                    <button
+                                        onClick={() => setConfirmDelete(t.id)}
+                                        className="flex items-center justify-center p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors outline outline-1 outline-red-200"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
