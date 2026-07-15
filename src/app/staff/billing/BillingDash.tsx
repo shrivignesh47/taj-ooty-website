@@ -11,10 +11,11 @@ import { BillingReports } from './components/BillingReports';
 import { AdminStaff } from '@/app/staff/admin/components/AdminStaff';
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { AdminExport } from '@/app/staff/admin/components/AdminExport';
+import { AdminCRM } from '@/app/staff/admin/components/AdminCRM';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
-    X, ShieldAlert, Users, LayoutGrid, FileSpreadsheet, Loader2,
+    X, ShieldAlert, Users, User, LayoutGrid, FileSpreadsheet, Loader2,
     Settings, Activity, TrendingUp, RefreshCw, LogOut, Menu, IndianRupee 
 } from 'lucide-react';
 import { fmt } from './components/utils';
@@ -66,8 +67,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                 
                 {/* Left Area - Bento Dashboard Grid OR expanded list views */}
                 <div className="lg:col-span-8 space-y-6">
-                    
-                    {s.view === 'bento' && (
+                                        {s.view === 'bento' && (
                         <BentoDashboard 
                             tables={s.tables}
                             handleSelectTable={s.handleSelectTable}
@@ -86,9 +86,9 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             dayStats={s.dayStats}
                             isRegisterOpen={s.isRegisterOpen}
                             handleSidebarAction={s.handleSidebarAction}
+                            history={s.history}
                         />
                     )}
-
                     {s.view === 'tables' && (
                         <div className="space-y-6">
                             <div className="flex justify-between items-center">
@@ -127,7 +127,9 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             dayStats={s.dayStats} 
                             setView={s.setView} 
                             selectedReport={s.selectedReport} 
-                            setSelectedReport={s.setSelectedReport} 
+                            setSelectedReport={s.setSelectedReport}
+                            history={s.history}
+                            menuItemsList={s.menuItemsList}
                         />
                     )}
                 </div>
@@ -142,7 +144,6 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                     setPaymentMethod={s.setPaymentMethod}
                     submittingPayment={s.submittingPayment}
                     billPrinted={s.billPrinted}
-                    setBillPrinted={s.setBillPrinted}
                     discountType={s.discountType}
                     setDiscountType={s.setDiscountType}
                     discountValue={s.discountValue}
@@ -409,8 +410,35 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                         name: g.name,
                                         visits: g.totalVisits,
                                         totalSpent: g.totalSpent,
-                                        lastVisit: new Date().toISOString()
+                                        lastVisit: g.lastVisit || new Date().toISOString()
                                     }))} 
+                                />
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
+                {s.activeOpModal === 'CRM Customers' && (
+                    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-[#F6EEDF] w-full max-w-5xl rounded-2xl shadow-xl overflow-hidden border border-[#C9974A]/30 flex flex-col max-h-[90vh]"
+                        >
+                            <div className="bg-[#4E1414] px-6 py-4 flex justify-between items-center shrink-0">
+                                <h3 className="text-[#F6EEDF] font-black text-lg flex items-center gap-2">
+                                    <User className="w-5 h-5 text-[#C9974A]" /> Guests CRM Database
+                                </h3>
+                                <button onClick={() => s.setActiveOpModal(null)} className="text-[#F6EEDF]/80 hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 overflow-y-auto taj-scrollbar bg-white">
+                                <AdminCRM 
+                                    customers={s.guests} 
+                                    orders={s.history} 
+                                    settings={s.settings}
                                 />
                             </div>
                         </motion.div>

@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 007_rls_permission_based.sql
 -- Drop ALL existing RLS policies and recreate them using
 -- has_permission() checks ONLY - no hardcoded role names.

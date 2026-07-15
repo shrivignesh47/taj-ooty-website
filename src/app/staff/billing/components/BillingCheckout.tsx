@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, Dispatch, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
     Utensils, User, Minus, Plus, Banknote, CreditCard, QrCode, 
@@ -32,7 +33,7 @@ interface Props {
     isSplitEnabled: boolean;
     setIsSplitEnabled: (split: boolean) => void;
     splitGuests: number;
-    setSplitGuests: (guests: number | ((prev: number) => number)) => void;
+    setSplitGuests: Dispatch<SetStateAction<number>>;
     settings: any;
     handlePrintBill: (table: any) => void;
     handleSettlePayment: (table: any) => void;
@@ -173,9 +174,9 @@ export function BillingCheckout({
                                     <div className="flex items-center justify-between text-xs">
                                         <span>Number of Guests:</span>
                                         <div className="flex items-center gap-2">
-                                            <button onClick={() => setSplitGuests(prev => Math.max(2, typeof prev === 'function' ? prev(2) : prev - 1))} className="p-1 bg-white border border-[#C9974A]/30 rounded"><Minus className="w-3 h-3" /></button>
+                                            <button onClick={() => setSplitGuests(prev => Math.max(2, prev - 1))} className="p-1 bg-white border border-[#C9974A]/30 rounded"><Minus className="w-3 h-3" /></button>
                                             <span className="font-bold">{splitGuests}</span>
-                                            <button onClick={() => setSplitGuests(prev => (typeof prev === 'function' ? prev(0) : prev) + 1)} className="p-1 bg-white border border-[#C9974A]/30 rounded"><Plus className="w-3 h-3" /></button>
+                                            <button onClick={() => setSplitGuests(prev => prev + 1)} className="p-1 bg-white border border-[#C9974A]/30 rounded"><Plus className="w-3 h-3" /></button>
                                         </div>
                                     </div>
                                 )}

@@ -2,9 +2,10 @@
 
 import { History } from 'lucide-react';
 import { orderTotal, fmt } from './utils';
+import { CashierOrder } from '../types';
 
 interface Props {
-    history: any[];
+    history: CashierOrder[];
     setView: (view: 'bento' | 'tables' | 'takeaway' | 'history' | 'reports') => void;
 }
 

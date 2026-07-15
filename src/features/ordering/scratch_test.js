@@ -16,7 +16,7 @@ async function test() {
     try {
         console.log('Logging in as cashier...');
         const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-            email: 'cashier@taj.com',
+            email: 'admin@taj.com',
             password: 'password123'
         });
         if (loginErr) {
@@ -25,17 +25,29 @@ async function test() {
         }
         console.log('Logged in successfully. User ID:', loginData.user.id);
 
-        console.log('Fetching staff users...');
+        console.log('Fetching staff users with full nested query...');
         const { data: staff, error: staffErr } = await supabase
             .from('staff_users')
-            .select('*, roles(name)')
-            .order('name');
+            .select(`
+                id,
+                name,
+                auth_id,
+                roles (
+                    name,
+                    role_permissions (
+                        permissions (
+                            key
+                        )
+                    )
+                )
+            `)
+            .eq('auth_id', loginData.user.id)
+            .single();
         
         if (staffErr) {
             console.error('Fetch staff error:', staffErr);
         } else {
-            console.log('Staff list size:', staff.length);
-            console.log('Staff sample:', JSON.stringify(staff.slice(0, 2), null, 2));
+            console.log('Staff data:', JSON.stringify(staff, null, 2));
         }
 
         console.log('Fetching roles...');

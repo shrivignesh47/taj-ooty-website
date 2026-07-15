@@ -50,6 +50,7 @@ export interface GuestRecord {
     phone: string;
     totalVisits: number;
     totalSpent: number;
+    lastVisit?: string;
 }
 
 export interface StaffUser {

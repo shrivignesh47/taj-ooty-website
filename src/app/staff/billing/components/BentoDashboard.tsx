@@ -2,7 +2,7 @@
 
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { 
-    LayoutGrid, BookOpen, ChefHat, CalendarRange, User, Activity 
+    LayoutGrid, BookOpen, ChefHat, CalendarRange, User, Activity, Flame 
 } from 'lucide-react';
 import { fmt } from './utils';
 
@@ -24,6 +24,7 @@ interface Props {
     dayStats: any;
     isRegisterOpen: boolean;
     handleSidebarAction: (actionId: string, permKey: string) => void;
+    history: any[];
 }
 
 export function BentoDashboard({
@@ -43,8 +44,30 @@ export function BentoDashboard({
     expectedCash,
     dayStats,
     isRegisterOpen,
-    handleSidebarAction
+    handleSidebarAction,
+    history
 }: Props) {
+    // Find the trending item dynamically from the shift history
+    const itemCounts: Record<string, { qty: number; name: string; isVeg: boolean }> = {};
+    const aggregateOrders = [...(activeOrders || []), ...(history || [])];
+    aggregateOrders.forEach(order => {
+        order.order_items?.forEach((i: any) => {
+            const itemName = i.menu_items?.name;
+            if (itemName) {
+                if (!itemCounts[itemName]) {
+                    itemCounts[itemName] = { 
+                        qty: 0, 
+                        name: itemName, 
+                        isVeg: !!i.menu_items?.is_veg 
+                    };
+                }
+                itemCounts[itemName].qty += i.qty;
+            }
+        });
+    });
+
+    const trendingItem = Object.values(itemCounts).sort((a, b) => b.qty - a.qty)[0] || null;
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             
@@ -115,71 +138,109 @@ export function BentoDashboard({
             </div>
 
             {/* Bento 4: Staff attendance entry */}
-            <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-6 space-y-3">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                    <CalendarRange className="w-4 h-4 text-[#C9974A]" /> Staff Attendance Check-in
-                </h3>
-                <div className="space-y-3 text-xs">
-                    <div className="flex gap-2">
-                        <select
-                            value={attendanceStaffId}
-                            onChange={e => setAttendanceStaffId(e.target.value)}
-                            className="flex-1 bg-[#F6EEDF]/40 border border-[#C9974A]/40 rounded-xl px-2 py-1.5 text-xs text-[#4E1414] focus:outline-none"
-                        >
-                            {staffList.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.is_active ? 'Active' : 'Offline'})</option>
-                            ))}
-                        </select>
-                        <button
-                            onClick={() => handleStaffAttendance('clock_in')}
-                            className="bg-green-700 hover:bg-green-800 text-white font-bold px-3 py-1.5 rounded-lg text-[10px]"
-                        >
-                            Clock In
-                        </button>
-                        <button
-                            onClick={() => handleStaffAttendance('clock_out')}
-                            className="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1.5 rounded-lg text-[10px]"
-                        >
-                            Clock Out
-                        </button>
-                    </div>
+            <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px]">
+                <div className="space-y-3">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
+                        <CalendarRange className="w-4 h-4 text-[#C9974A]" /> Attendance Check-in
+                    </h3>
+                    <div className="space-y-3 text-xs">
+                        <div className="flex gap-2">
+                            <select
+                                value={attendanceStaffId}
+                                onChange={e => setAttendanceStaffId(e.target.value)}
+                                className="flex-1 bg-[#F6EEDF]/40 border border-[#C9974A]/40 rounded-xl px-2 py-1.5 text-xs text-[#4E1414] focus:outline-none max-w-[130px] sm:max-w-none"
+                            >
+                                {staffList.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name} ({s.is_active ? 'Active' : 'Offline'})</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => handleStaffAttendance('clock_in')}
+                                className="bg-green-700 hover:bg-green-800 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px]"
+                            >
+                                In
+                            </button>
+                            <button
+                                onClick={() => handleStaffAttendance('clock_out')}
+                                className="bg-red-700 hover:bg-red-800 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px]"
+                            >
+                                Out
+                            </button>
+                        </div>
 
-                    {/* Attendance history logs */}
-                    <div className="space-y-1.5 max-h-[100px] overflow-y-auto pr-1">
-                        {attendanceLogs.map(log => (
-                            <div key={log.id} className="flex justify-between text-[10px] bg-gray-50 p-1.5 rounded border">
-                                <span className="font-semibold">{log.staff_name}</span>
-                                <span>In: {new Date(log.clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                <span className="text-gray-400">
-                                    {log.clock_out ? `Out: ${new Date(log.clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Active Shift'}
-                                </span>
-                            </div>
-                        ))}
+                        {/* Attendance history logs */}
+                        <div className="space-y-1 max-h-[85px] overflow-y-auto pr-1">
+                            {attendanceLogs.slice(0, 3).map(log => (
+                                <div key={log.id} className="flex justify-between text-[9px] bg-gray-50 p-1 rounded border">
+                                    <span className="font-semibold truncate max-w-[60px]">{log.staff_name}</span>
+                                    <span>In: {new Date(log.clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                    <span className="text-gray-400">
+                                        {log.clock_out ? `Out: ${new Date(log.clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Active'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Bento 5: CRM Guest Database */}
-            <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-6 space-y-3">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                    <User className="w-4 h-4 text-[#C9974A]" /> CRM Guest Database
-                </h3>
-                <div className="space-y-2 max-h-[170px] overflow-y-auto pr-1">
-                    {guests.map((g, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-[#C9974A]/10 last:border-b-0">
-                            <div>
-                                <p className="font-bold">{g.name}</p>
-                                <p className="text-[10px] text-gray-400">{g.phone}</p>
+            <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px]">
+                <div className="space-y-3">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-[#C9974A]" /> CRM Guest Database
+                    </h3>
+                    <div className="space-y-2 max-h-[145px] overflow-y-auto pr-1">
+                        {guests.slice(0, 4).map((g, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-[#C9974A]/10 last:border-b-0">
+                                <div>
+                                    <p className="font-bold truncate max-w-[95px]">{g.name}</p>
+                                    <p className="text-[9px] text-gray-400">{g.phone}</p>
+                                </div>
+                                <div className="text-right text-[9px] text-gray-400">
+                                    <p>{g.totalVisits} visits</p>
+                                    <p className="font-bold text-[#4E1414]">{fmt(g.totalSpent)}</p>
+                                </div>
                             </div>
-                            <div className="text-right text-[10px] text-gray-400">
-                                <p>{g.totalVisits} visits</p>
-                                <p className="font-bold text-[#4E1414]">{fmt(g.totalSpent)}</p>
+                        ))}
+                        {guests.length === 0 && (
+                            <p className="text-center text-[10px] text-gray-400 italic py-8">No guests registered yet.</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Bento 5b: Trending Dish Insights */}
+            <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
+                {/* Decorative background fire icon */}
+                <div className="absolute right-0 bottom-0 opacity-5 transform translate-x-2 translate-y-2 pointer-events-none group-hover:scale-110 duration-500">
+                    <Flame className="w-36 h-36" />
+                </div>
+                
+                <div className="space-y-3">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
+                        <Flame className="w-4 h-4 text-orange-500 animate-pulse" /> Popular Trending Dish
+                    </h3>
+                    
+                    {trendingItem ? (
+                        <div className="pt-2 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2.5 h-2.5 rounded-full ${trendingItem.isVeg ? 'bg-green-600' : 'bg-red-600'}`} title={trendingItem.isVeg ? 'Veg' : 'Non-Veg'} />
+                                <span className="text-sm font-black text-[#4E1414] leading-tight line-clamp-2">{trendingItem.name}</span>
                             </div>
+                            <p className="text-xs text-gray-500 font-medium">Portions Sold: <span className="font-bold text-[#C9974A] text-sm">{trendingItem.qty} orders</span></p>
                         </div>
-                    ))}
-                    {guests.length === 0 && (
-                        <p className="text-center text-xs text-gray-400 italic py-8">No guests registered yet.</p>
+                    ) : (
+                        <div className="pt-2">
+                            <p className="text-xs text-gray-400 italic">No portion sales recorded yet this shift.</p>
+                        </div>
                     )}
+                </div>
+
+                <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/25 rounded-xl p-2.5 text-[10px] text-gray-600 font-semibold z-10">
+                    {trendingItem 
+                        ? '🔥 This signature recipe is currently the highest grossing dish of the shift!' 
+                        : '💡 Once orders are settled, the highest selling item will appear here.'}
                 </div>
             </div>
 

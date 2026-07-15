@@ -2,9 +2,10 @@
 
 import { ClipboardList, IndianRupee } from 'lucide-react';
 import { orderTotal, fmt } from './utils';
+import { CashierOrder } from '../types';
 
 interface Props {
-    takeawayOrders: any[];
+    takeawayOrders: CashierOrder[];
     setView: (view: 'bento' | 'tables' | 'takeaway' | 'history' | 'reports') => void;
     handleSelectTable: (dummyTable: any) => void;
 }

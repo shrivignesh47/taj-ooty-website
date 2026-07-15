@@ -1,10 +1,11 @@
 "use client";
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
     X, Lock, Layers, LayoutGrid, ClipboardList, History, 
     BarChart3, ChefHat, User, Users, Activity, TrendingUp, 
-    BookOpen, Settings, FileSpreadsheet 
+    BookOpen, Settings, FileSpreadsheet, ChevronDown 
 } from 'lucide-react';
 
 interface Props {
@@ -20,21 +21,55 @@ export function BillingSidebar({
     hasPerm,
     handleSidebarAction
 }: Props) {
-    const sidebarItems = [
-        { id: 'bento', label: 'Bento Dashboard Overview', icon: Layers, perm: 'view_billing' },
-        { id: 'tables', label: 'Dine-In Floor Map Grid', icon: LayoutGrid, perm: 'view_orders' },
-        { id: 'takeaway', label: 'Takeaway Counter Queue', icon: ClipboardList, perm: 'view_orders' },
-        { id: 'history', label: 'Closed Invoices Archive', icon: History, perm: 'view_billing' },
-        { id: 'reports', label: 'Sales Reports Summary', icon: BarChart3, perm: 'view_reports' },
-        { id: 'Kitchen Tickets', label: 'Kitchen Tickets Queue', icon: ChefHat, perm: 'view_kitchen_queue' },
-        { id: 'CRM Customers', label: 'Guests CRM Database', icon: User, perm: 'view_revenue' },
-        { id: 'Staff Roster', label: 'Staff Roster Management', icon: Users, perm: 'manage_staff' },
-        { id: 'Table Configuration', label: 'Physical Table Configuration', icon: LayoutGrid, perm: 'manage_tables' },
-        { id: 'Drawer Session', label: 'Register Drawer Shift', icon: Activity, perm: 'manage_cash_drawer' },
-        { id: 'Petty Expenses', label: 'Petty Cash Expenses', icon: TrendingUp, perm: 'manage_expenses' },
-        { id: 'Stock Inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'manage_inventory' },
-        { id: 'GST Settings', label: 'GST Tax Configurations', icon: Settings, perm: 'manage_gst' },
-        { id: 'Export', label: 'Export Data (Excel)', icon: FileSpreadsheet, perm: 'export_data' },
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+        pos: true,
+        management: false,
+        analytics: false
+    });
+
+    const toggleGroup = (key: string) => {
+        setExpandedGroups(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
+    };
+
+    const groups = [
+        {
+            key: 'pos',
+            label: 'POS Operations',
+            icon: ClipboardList,
+            items: [
+                { id: 'bento', label: 'Bento Dashboard Overview', icon: Layers, perm: 'view_billing' },
+                { id: 'tables', label: 'Dine-In Floor Map Grid', icon: LayoutGrid, perm: 'view_orders' },
+                { id: 'takeaway', label: 'Takeaway Counter Queue', icon: ClipboardList, perm: 'view_orders' },
+                { id: 'Kitchen Tickets', label: 'Kitchen Tickets Queue', icon: ChefHat, perm: 'view_kitchen_queue' },
+            ]
+        },
+        {
+            key: 'management',
+            label: 'Management & Shifts',
+            icon: Users,
+            items: [
+                { id: 'Staff Roster', label: 'Staff Roster Management', icon: Users, perm: 'manage_staff' },
+                { id: 'Drawer Session', label: 'Register Drawer Shift', icon: Activity, perm: 'manage_cash_drawer' },
+                { id: 'Petty Expenses', label: 'Petty Cash Expenses', icon: TrendingUp, perm: 'manage_expenses' },
+                { id: 'Stock Inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'manage_inventory' },
+            ]
+        },
+        {
+            key: 'analytics',
+            label: 'Analytics & Settings',
+            icon: Settings,
+            items: [
+                { id: 'history', label: 'Closed Invoices Archive', icon: History, perm: 'view_billing' },
+                { id: 'reports', label: 'Sales Reports Summary', icon: BarChart3, perm: 'view_reports' },
+                { id: 'CRM Customers', label: 'Guests CRM Database', icon: User, perm: 'view_revenue' },
+                { id: 'Table Configuration', label: 'Physical Table Configuration', icon: LayoutGrid, perm: 'manage_tables' },
+                { id: 'GST Settings', label: 'GST Tax Configurations', icon: Settings, perm: 'manage_gst' },
+                { id: 'Export', label: 'Export Data (Excel)', icon: FileSpreadsheet, perm: 'export_data' },
+            ]
+        }
     ];
 
     return (
@@ -56,32 +91,69 @@ export function BillingSidebar({
             >
                 <div className="p-5 flex-1 flex flex-col overflow-y-auto taj-scrollbar">
                     <div className="flex justify-between items-center pb-4 border-b border-[#C9974A]/25 mb-4">
-                        <h2 className="font-bold text-base flex items-center gap-2">
+                        <h2 className="font-bold text-base flex items-center gap-2 text-[#4E1414]">
                             <Layers className="w-5 h-5 text-[#C9974A]" /> Operations Control
                         </h2>
-                        <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-gray-400 hover:text-[#4E1414]">
+                        <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-gray-400 hover:text-[#4E1414] transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
 
-                    <div className="space-y-1">
-                        {sidebarItems.map((item, idx) => {
-                            const allowed = hasPerm(item.perm);
+                    <div className="space-y-3">
+                        {groups.map((group) => {
+                            const isExpanded = !!expandedGroups[group.key];
                             return (
-                                <button
-                                    key={idx}
-                                    onClick={() => handleSidebarAction(item.id, item.perm)}
-                                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-left
-                                        ${allowed 
-                                            ? 'text-[#4E1414] hover:bg-[#F6EEDF]/40' 
-                                            : 'text-gray-400 opacity-60'}`}
-                                >
-                                    <span className="flex items-center gap-2.5">
-                                        <item.icon className="w-4 h-4 text-[#C9974A]" />
-                                        {item.label}
-                                    </span>
-                                    {!allowed && <Lock className="w-3.5 h-3.5 text-gray-400" />}
-                                </button>
+                                <div key={group.key} className="border-b border-gray-100 pb-2 last:border-0">
+                                    {/* Group Header */}
+                                    <button
+                                        onClick={() => toggleGroup(group.key)}
+                                        className="w-full flex items-center justify-between py-2 text-xs font-black tracking-wider uppercase text-[#4E1414]/50 hover:text-[#4E1414] transition-colors text-left"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <group.icon className="w-3.5 h-3.5 text-[#C9974A]" />
+                                            {group.label}
+                                        </span>
+                                        <motion.div
+                                            animate={{ rotate: isExpanded ? 180 : 0 }}
+                                            transition={{ duration: 0.2 }}
+                                        >
+                                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                                        </motion.div>
+                                    </button>
+
+                                    {/* Group Items */}
+                                    <AnimatePresence initial={false}>
+                                        {isExpanded && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                                className="overflow-hidden space-y-0.5 mt-1 pl-1"
+                                            >
+                                                {group.items.map((item, idx) => {
+                                                    const allowed = hasPerm(item.perm);
+                                                    return (
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => handleSidebarAction(item.id, item.perm)}
+                                                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left
+                                                                ${allowed 
+                                                                    ? 'text-[#4E1414] hover:bg-[#F6EEDF]/40 cursor-pointer' 
+                                                                    : 'text-gray-400 opacity-60 cursor-pointer'}`}
+                                                        >
+                                                            <span className="flex items-center gap-2.5">
+                                                                <item.icon className="w-4 h-4 text-[#C9974A]" />
+                                                                {item.label}
+                                                            </span>
+                                                            {!allowed && <Lock className="w-3.5 h-3.5 text-gray-400" />}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                             );
                         })}
                     </div>

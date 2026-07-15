@@ -9,6 +9,13 @@ import {
     MainView, PayMethod, DayStats, PettyCashEntry
 } from '../types';
 
+export const PRESET_COUPONS = [
+    { code: 'TAJ10', type: 'pct', value: 10, description: '10% Restaurant Special' },
+    { code: 'WELCOME50', type: 'amt', value: 50, description: '₹50 Flat Welcome Discount' },
+    { code: 'FESTIVE15', type: 'pct', value: 15, description: '15% Festive Occasion Discount' },
+    { code: 'VIP200', type: 'amt', value: 200, description: '₹200 Flat VIP Discount' }
+];
+
 export function useBillingState(activeUser: any) {
     const [view, setView] = useState<MainView>('bento');
     const [tables, setTables] = useState<TableView[]>([]);
@@ -112,7 +119,7 @@ export function useBillingState(activeUser: any) {
                 .eq('status', 'billed')
                 .order('created_at', { ascending: false })
                 .limit(100),
-            supabase.from('menu_items').select('*').order('name'),
+            supabase.from('menu_items').select('*, categories(id, name)').order('name'),
             supabase.from('staff_users').select('*, roles(name)').order('name'),
             supabase.from('staff_attendance').select('id, staff_id, clock_in, clock_out, staff_users(name)').order('clock_in', { ascending: false }).limit(20),
             supabase.from('roles').select('id, name').order('name')
@@ -215,7 +222,7 @@ export function useBillingState(activeUser: any) {
             return d.toDateString() === today.toDateString();
         });
 
-        const guestMap = new Map<string, { name: string; phone: string; totalVisits: number; totalSpent: number }>();
+        const guestMap = new Map<string, { name: string; phone: string; totalVisits: number; totalSpent: number; lastVisit: string }>();
         const aggregateOrders = [...rawOrders, ...rawHistory];
         aggregateOrders.forEach(o => {
             if (o.customer_phone) {
@@ -224,12 +231,16 @@ export function useBillingState(activeUser: any) {
                 if (existing) {
                     existing.totalVisits += 1;
                     existing.totalSpent += sub;
+                    if (new Date(o.created_at).getTime() > new Date(existing.lastVisit).getTime()) {
+                        existing.lastVisit = o.created_at;
+                    }
                 } else {
                     guestMap.set(o.customer_phone, {
                         name: o.customer_name,
                         phone: o.customer_phone,
                         totalVisits: 1,
-                        totalSpent: sub
+                        totalSpent: sub,
+                        lastVisit: o.created_at
                     });
                 }
             }
