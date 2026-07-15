@@ -186,3 +186,25 @@ body {
 .taj-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #4E1414;
 }
+
+.taj-scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201, 151, 74, 0.3) transparent;
+}
+
+.taj-scrollbar-dark::-webkit-scrollbar {
+  width: 4px;
+}
+
+.taj-scrollbar-dark::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.taj-scrollbar-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(201, 151, 74, 0.3);
+  border-radius: 999px;
+}
+
+.taj-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background-color: #C9974A;
+}

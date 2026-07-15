@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList } from 'lucide-react';
+import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList, ChevronLeft, ChevronDown } from 'lucide-react';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -37,6 +37,24 @@ const NAV_TABS = [
     { id: 'Settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
 ];
 
+const TAB_GROUPS = [
+    {
+        key: 'operations',
+        label: 'Operations',
+        tabs: ['Overview', 'Orders', 'Tables']
+    },
+    {
+        key: 'management',
+        label: 'Management',
+        tabs: ['Menu', 'Staff', 'Roles', 'Customers']
+    },
+    {
+        key: 'system',
+        label: 'System & Analytics',
+        tabs: ['Analytics', 'Export', 'Activity', 'Settings']
+    }
+];
+
 export function AdminDash() {
     const [metrics, setMetrics] = useState({ revenue: 0, totalOrders: 0, activeTables: 0, monthlyVisits: 0 });
     const [staff, setStaff] = useState<any[]>([]);
@@ -50,6 +68,18 @@ export function AdminDash() {
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Overview');
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+        operations: true,
+        management: true,
+        system: true
+    });
+    const toggleGroup = (key: string) => {
+        setExpandedGroups(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
+    };
 
     // Menu edit state
     const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
@@ -289,32 +319,110 @@ export function AdminDash() {
     return (
         <div className="flex h-screen text-[#241B15] font-sans overflow-hidden fixed inset-0 w-full z-50">
             {/* ── Sidebar ── */}
-            <aside className="w-60 bg-[#4E1414] border-r border-[#C9974A]/20 hidden lg:flex flex-col shadow-lg relative z-20">
-                <div className="p-7 pb-4 border-b border-[#C9974A]/20">
-                    <h1 className="text-2xl font-black text-[#F6EEDF] leading-tight">Taj Admin</h1>
-                    <p className="text-[10px] text-[#C9974A] mt-1 uppercase tracking-[0.2em] font-bold">Restaurant Manager</p>
-                </div>
+            <aside className={`bg-[#4E1414] border-r border-[#C9974A]/20 hidden lg:flex flex-col shadow-lg relative z-20 transition-all duration-300 ${isSidebarExpanded ? 'w-60' : 'w-20'}`}>
+                {isSidebarExpanded ? (
+                    <div className="flex justify-between items-center p-7 pb-4 border-b border-[#C9974A]/20">
+                        <div>
+                            <h1 className="text-2xl font-black text-[#F6EEDF] leading-tight">Taj Admin</h1>
+                            <p className="text-[10px] text-[#C9974A] mt-1 uppercase tracking-[0.2em] font-bold">Restaurant Manager</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsSidebarExpanded(false)} 
+                            className="text-[#C9974A] hover:text-[#F6EEDF] transition-colors p-1.5 rounded-lg hover:bg-[#C9974A]/10 cursor-pointer"
+                            title="Collapse Sidebar"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                    </div>
+                ) : (
+                    <div className="p-4 border-b border-[#C9974A]/20 flex flex-col items-center justify-center gap-4 transition-all">
+                        <button 
+                            onClick={() => setIsSidebarExpanded(true)} 
+                            className="text-[#C9974A] hover:text-[#F6EEDF] transition-colors p-1.5 rounded-lg hover:bg-[#C9974A]/10 cursor-pointer"
+                            title="Expand Sidebar"
+                        >
+                            <ChevronLeft className="w-5 h-5 rotate-180" />
+                        </button>
+                        <div className="w-10 h-10 rounded-xl bg-[#C9974A] text-[#4E1414] flex items-center justify-center font-black text-lg shadow-inner">
+                            TA
+                        </div>
+                    </div>
+                )}
 
-                <nav className="flex-grow px-3 py-4 space-y-1 overflow-y-auto taj-scrollbar">
-                    {permittedTabs.map(tab => (
-                        <SidebarItem
-                            key={tab.id}
-                            icon={tab.icon}
-                            label={tab.label}
-                            isActive={activeTab === tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            activeBadge={tab.id === 'Tables' ? occupiedCount : undefined}
-                        />
-                    ))}
+                <nav className="flex-grow px-3 py-4 space-y-4 overflow-y-auto taj-scrollbar-dark">
+                    {isSidebarExpanded ? (
+                        TAB_GROUPS.map(group => {
+                            const groupTabs = permittedTabs.filter(t => group.tabs.includes(t.id));
+                            if (groupTabs.length === 0) return null;
+
+                            const isGroupExpanded = expandedGroups[group.key] ?? true;
+
+                            return (
+                                <div key={group.key} className="space-y-1">
+                                    <button
+                                        onClick={() => toggleGroup(group.key)}
+                                        className="w-full flex items-center justify-between px-3 py-2 text-[#C9974A]/80 hover:text-[#F6EEDF] font-bold text-[10px] uppercase tracking-wider transition-colors"
+                                    >
+                                        <span>{group.label}</span>
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupExpanded ? '' : '-rotate-90'}`} />
+                                    </button>
+                                    
+                                    <AnimatePresence initial={false}>
+                                        {isGroupExpanded && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden space-y-0.5"
+                                            >
+                                                {groupTabs.map(tab => (
+                                                    <SidebarItem
+                                                        key={tab.id}
+                                                        icon={tab.icon}
+                                                        label={tab.label}
+                                                        isActive={activeTab === tab.id}
+                                                        onClick={() => setActiveTab(tab.id)}
+                                                        activeBadge={tab.id === 'Tables' ? occupiedCount : undefined}
+                                                        isExpanded={true}
+                                                    />
+                                                ))}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <div className="space-y-2.5">
+                            {permittedTabs.map(tab => (
+                                <SidebarItem
+                                    key={tab.id}
+                                    icon={tab.icon}
+                                    label={tab.label}
+                                    isActive={activeTab === tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    activeBadge={tab.id === 'Tables' ? occupiedCount : undefined}
+                                    isExpanded={false}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </nav>
 
                 <div className="p-3 border-t border-[#C9974A]/20 space-y-1.5">
-                    <Link href="/staff/dashboard" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl font-bold text-xs uppercase tracking-wider transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
-                        ← Stations Hub
-                    </Link>
+                    {isSidebarExpanded ? (
+                        <Link href="/staff/dashboard" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl font-bold text-xs uppercase tracking-wider transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
+                            ← Stations Hub
+                        </Link>
+                    ) : (
+                        <Link href="/staff/dashboard" title="Stations Hub" className="w-full flex items-center justify-center p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
+                            ←
+                        </Link>
+                    )}
                     <form action={logoutStaff}>
-                        <button type="submit" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/60 hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-xl font-bold transition-all">
-                            <LogOut className="w-4 h-4" /> Sign Out
+                        <button type="submit" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/60 hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-xl font-bold transition-all" title={!isSidebarExpanded ? 'Sign Out' : undefined}>
+                            <LogOut className="w-4 h-4" /> {isSidebarExpanded && 'Sign Out'}
                         </button>
                     </form>
                 </div>
@@ -430,26 +538,30 @@ export function AdminDash() {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function SidebarItem({ icon, label, isActive, onClick, activeBadge }: {
-    icon: React.ReactNode; label: string; isActive: boolean; onClick: () => void; activeBadge?: number;
+function SidebarItem({ icon, label, isActive, onClick, activeBadge, isExpanded }: {
+    icon: React.ReactNode; label: string; isActive: boolean; onClick: () => void; activeBadge?: number; isExpanded: boolean;
 }) {
     return (
         <button
             onClick={onClick}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all font-bold group
+            title={!isExpanded ? label : undefined}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all font-bold group relative
                 ${isActive
                     ? 'bg-[#C9974A] text-[#4E1414] shadow'
                     : 'text-[#F6EEDF]/70 hover:bg-[#F6EEDF]/10 hover:text-[#F6EEDF]'
                 }`}
         >
-            <div className="flex items-center gap-2.5 text-sm">
-                <span className={isActive ? 'text-[#4E1414]' : 'text-[#C9974A]/60 group-hover:text-[#C9974A]'}>{icon}</span>
-                {label}
+            <div className="flex items-center gap-2.5 text-sm w-full justify-center lg:justify-start">
+                <span className={isActive ? 'text-[#4E1414]' : 'text-[#C9974A]/60 group-hover:text-[#C9974A] flex-shrink-0'}>{icon}</span>
+                {isExpanded && <span className="truncate">{label}</span>}
             </div>
-            {activeBadge !== undefined && activeBadge > 0 && (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isActive ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-[#C9974A] text-[#4E1414]'}`}>
+            {isExpanded && activeBadge !== undefined && activeBadge > 0 && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${isActive ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-[#C9974A] text-[#4E1414]'}`}>
                     {activeBadge}
                 </span>
+            )}
+            {!isExpanded && activeBadge !== undefined && activeBadge > 0 && (
+                <div className="absolute right-2 top-2 w-2 h-2 rounded-full bg-red-500 border border-[#4E1414]" />
             )}
         </button>
     );
