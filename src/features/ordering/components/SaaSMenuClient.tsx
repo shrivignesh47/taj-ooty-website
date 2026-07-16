@@ -327,7 +327,7 @@ function CartBadge() {
 // -------------------------------------------------------------
 // Compact Mobile Item Row
 // -------------------------------------------------------------
-function CompactMobileItemRow({ item }: { item: import('../lib/types').MenuItem }) {
+function CompactMobileItemRow({ item }: { item: any }) {
     const items = useCartStore((state) => state.items);
     const addItem = useCartStore((state) => state.addItem);
     const updateQty = useCartStore((state) => state.updateQty);
@@ -335,10 +335,27 @@ function CompactMobileItemRow({ item }: { item: import('../lib/types').MenuItem 
     const cartItem = items.find(i => i.menu_item_id === item.id);
     const qty = cartItem ? cartItem.qty : 0;
 
+    const handleIncrement = () => {
+        if (item.stock_qty !== null && qty >= item.stock_qty) {
+            alert(`Sorry, only ${item.stock_qty} portions of ${item.name} are available in the kitchen!`);
+            return;
+        }
+        if (qty === 0) {
+            addItem({ menu_item_id: item.id, name: item.name, price: item.price, qty: 1 });
+        } else {
+            updateQty(cartItem!.id, qty + 1);
+        }
+    };
+
     return (
         <div className="flex items-center justify-between py-4 border-b border-[#241B15]/5">
             <div className="flex-1 pr-3">
                 <h3 className="font-medium text-[#241B15] text-[16px] leading-snug break-words">{item.name}</h3>
+                {item.stock_qty !== null && (
+                    <span className="text-[10px] bg-amber-100 text-amber-850 border border-amber-200 rounded px-1.5 py-0.5 mt-1 inline-block font-bold">
+                        {item.stock_qty <= 3 ? `Ending Soon: ${item.stock_qty} Left` : `${item.stock_qty} Available`}
+                    </span>
+                )}
             </div>
             <div className="flex items-center gap-4 shrink-0">
                 <span className="font-bold text-[#C9974A] text-[14px]">₹{item.price}</span>
@@ -346,25 +363,25 @@ function CompactMobileItemRow({ item }: { item: import('../lib/types').MenuItem 
                 {qty === 0 ? (
                     <motion.button
                         whileTap={{ scale: 0.92 }}
-                        onClick={() => addItem({ menu_item_id: item.id, name: item.name, price: item.price, qty: 1 })}
-                        className="bg-white border border-[#C9974A]/30 text-[#4E1414] w-[44px] h-[36px] rounded-lg flex items-center justify-center shadow-sm"
+                        onClick={handleIncrement}
+                        className="bg-white border border-[#C9974A]/30 text-[#4E1414] w-[44px] h-[36px] rounded-lg flex items-center justify-center shadow-sm cursor-pointer font-bold text-xs"
                     >
-                        <Plus className="w-4 h-4" />
+                        ADD
                     </motion.button>
                 ) : (
                     <div className="flex items-center bg-white border border-[#C9974A]/30 rounded-lg shadow-sm h-[36px] overflow-hidden">
                         <motion.button 
                             whileTap={{ scale: 0.92 }}
                             onClick={() => updateQty(cartItem!.id, qty - 1)} 
-                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5"
+                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5 cursor-pointer"
                         >
                             <Minus className="w-3 h-3" />
                         </motion.button>
                         <span className="text-[14px] font-bold text-[#4E1414] w-[24px] text-center">{qty}</span>
                         <motion.button 
                             whileTap={{ scale: 0.92 }}
-                            onClick={() => updateQty(cartItem!.id, qty + 1)} 
-                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5"
+                            onClick={handleIncrement} 
+                            className="w-[36px] h-full flex items-center justify-center text-[#4E1414] bg-white active:bg-black/5 cursor-pointer"
                         >
                             <Plus className="w-3 h-3" />
                         </motion.button>

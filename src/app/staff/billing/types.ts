@@ -15,6 +15,8 @@ export interface CashierOrder {
     table_id: string | null;
     restaurant_tables: { table_no: number; id: string } | null;
     order_items: CashierOrderItem[];
+    source?: string;
+    token_no?: string | null;
 }
 
 export interface TableView {
@@ -74,5 +76,5 @@ export interface AttendanceLog {
     staff_name: string;
 }
 
-export type MainView = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports';
+export type MainView = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders' | 'stock_inventory';
 export type PayMethod = 'cash' | 'card' | 'upi';

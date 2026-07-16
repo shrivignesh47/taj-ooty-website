@@ -25,40 +25,25 @@ async function test() {
         }
         console.log('Logged in successfully. User ID:', loginData.user.id);
 
-        console.log('Fetching staff users with full nested query...');
-        const { data: staff, error: staffErr } = await supabase
-            .from('staff_users')
+        console.log('Fetching live orders with restaurant_tables join...');
+        const { data: liveOrders, error: liveErr } = await supabase
+            .from('orders')
             .select(`
-                id,
-                name,
-                auth_id,
-                roles (
-                    name,
-                    role_permissions (
-                        permissions (
-                            key
-                        )
-                    )
+                *,
+                restaurant_tables (*),
+                order_items (
+                    *,
+                    menu_items (name, is_veg, category_id)
                 )
-            `)
-            .eq('auth_id', loginData.user.id)
-            .single();
-        
-        if (staffErr) {
-            console.error('Fetch staff error:', staffErr);
-        } else {
-            console.log('Staff data:', JSON.stringify(staff, null, 2));
-        }
+            `);
 
-        console.log('Fetching roles...');
-        const { data: roles, error: rolesErr } = await supabase
-            .from('roles')
-            .select('id, name')
-            .order('name');
-        if (rolesErr) {
-            console.error('Fetch roles error:', rolesErr);
+        if (liveErr) {
+            console.error('KDS fetch error:', liveErr);
         } else {
-            console.log('Roles size:', roles.length);
+            console.log('Successfully fetched live orders size:', liveOrders.length);
+            if (liveOrders.length > 0) {
+                console.log('Sample order sample item:', liveOrders[0].order_items?.[0]);
+            }
         }
 
     } catch (e) {

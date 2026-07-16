@@ -16,6 +16,7 @@ interface Props {
     handleDeleteMenu: (id: string) => void;
     setEditForm: (f: { name: string; price: number; category: string }) => void;
     onMenuUpdated: () => void;
+    readOnly?: boolean;
 }
 
 export function AdminMenuSync({
@@ -29,6 +30,7 @@ export function AdminMenuSync({
     handleDeleteMenu,
     setEditForm,
     onMenuUpdated,
+    readOnly = false,
 }: Props) {
     const [showDeleteAll, setShowDeleteAll] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -109,13 +111,21 @@ export function AdminMenuSync({
             {/* Top Action Bar (Compact) */}
             <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center bg-white p-4 rounded-xl border border-[#C9974A]/20 shadow-sm">
                 <div className="flex items-center gap-2">
-                    <button onClick={() => fileInputRef.current?.click()} className="relative flex items-center gap-2 px-3 py-1.5 bg-[#4E1414] text-[#F6EEDF] rounded-lg text-sm font-bold hover:bg-[#350C0C] transition-colors shadow-sm">
-                        <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} ref={fileInputRef} className="absolute inset-0 opacity-0 cursor-pointer hidden" />
-                        <FileSpreadsheet className="w-4 h-4" /> Upload Excel/CSV
-                    </button>
-                    <button className="flex items-center gap-2 px-3 py-1.5 bg-[#F6EEDF] text-[#4E1414] border border-[#C9974A]/30 rounded-lg text-sm font-bold hover:bg-[#e8dec6] transition-colors shadow-sm">
-                        <BookOpen className="w-4 h-4 text-[#C9974A]" /> Add Item Manually
-                    </button>
+                    {!readOnly ? (
+                        <>
+                            <button onClick={() => fileInputRef.current?.click()} className="relative flex items-center gap-2 px-3 py-1.5 bg-[#4E1414] text-[#F6EEDF] rounded-lg text-sm font-bold hover:bg-[#350C0C] transition-colors shadow-sm">
+                                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} ref={fileInputRef} className="absolute inset-0 opacity-0 cursor-pointer hidden" />
+                                <FileSpreadsheet className="w-4 h-4" /> Upload Excel/CSV
+                            </button>
+                            <button className="flex items-center gap-2 px-3 py-1.5 bg-[#F6EEDF] text-[#4E1414] border border-[#C9974A]/30 rounded-lg text-sm font-bold hover:bg-[#e8dec6] transition-colors shadow-sm">
+                                <BookOpen className="w-4 h-4 text-[#C9974A]" /> Add Item Manually
+                            </button>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-2 text-xs font-black uppercase text-[#4E1414]/50 bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 select-none">
+                            🔒 View Only Menu Mode
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
@@ -126,9 +136,11 @@ export function AdminMenuSync({
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="text-sm px-3 py-1.5 rounded-lg border border-[#C9974A]/40 bg-white min-w-[220px] outline-none focus:border-[#C9974A] focus:ring-1 focus:ring-[#C9974A] shadow-sm transition-all"
                     />
-                    <button onClick={() => setShowDeleteAll(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors shrink-0 shadow-sm">
-                        <Trash2 className="w-4 h-4" /> Clear All Menu Data
-                    </button>
+                    {!readOnly && (
+                        <button onClick={() => setShowDeleteAll(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors shrink-0 shadow-sm">
+                            <Trash2 className="w-4 h-4" /> Clear All Menu Data
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -220,12 +232,16 @@ export function AdminMenuSync({
                                                         <button title={isAvail ? "Hide from menu" : "Show on menu"} onClick={() => toggleAvailability(m)} disabled={togglingId === m.id} className={`p-1 rounded transition-colors ${isAvail ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
                                                             {isAvail ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                                                         </button>
-                                                        <button title="Edit item" onClick={() => handleStartEdit(m)} className="bg-white text-[#C9974A] p-1 rounded hover:bg-[#F6EEDF] transition-colors border border-[#C9974A]/30">
-                                                            <Edit2 className="w-3 h-3" />
-                                                        </button>
-                                                        <button title="Delete item" onClick={() => doDelete(m.id)} className="bg-red-50 text-[#B91C1C] p-1 rounded hover:bg-red-100 transition-colors border border-red-200">
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </button>
+                                                        {!readOnly && (
+                                                            <>
+                                                                <button title="Edit item" onClick={() => handleStartEdit(m)} className="bg-white text-[#C9974A] p-1 rounded hover:bg-[#F6EEDF] transition-colors border border-[#C9974A]/30">
+                                                                    <Edit2 className="w-3 h-3" />
+                                                                </button>
+                                                                <button title="Delete item" onClick={() => doDelete(m.id)} className="bg-red-50 text-[#B91C1C] p-1 rounded hover:bg-red-100 transition-colors border border-red-200">
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </>
                                                 )}
                                             </div>
@@ -235,11 +251,13 @@ export function AdminMenuSync({
                             </div>
 
                             {/* Card Footer */}
-                            <div className="bg-white px-3 py-2 border-t border-[#C9974A]/20 shrink-0 text-center">
-                                <button className="text-[#C9974A] hover:text-[#4E1414] text-xs font-bold transition-colors inline-flex items-center gap-1">
-                                    <Plus className="w-3.5 h-3.5" /> Add {catName} Item
-                                </button>
-                            </div>
+                            {!readOnly && (
+                                <div className="bg-white px-3 py-2 border-t border-[#C9974A]/20 shrink-0 text-center">
+                                    <button className="text-[#C9974A] hover:text-[#4E1414] text-xs font-bold transition-colors inline-flex items-center gap-1">
+                                        <Plus className="w-3.5 h-3.5" /> Add {catName} Item
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 })}

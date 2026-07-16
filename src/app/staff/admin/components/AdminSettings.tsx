@@ -17,7 +17,11 @@ export function AdminSettings() {
         auto_print_on_accept: false,
         printer_name: '',
         print_kot: true,
-        print_bill: true
+        print_bill: true,
+        swiggy_enabled: false,
+        zomato_enabled: false,
+        swiggy_merchant_id: '',
+        zomato_merchant_id: ''
     });
 
     const [loading, setLoading] = useState(true);
@@ -48,7 +52,11 @@ export function AdminSettings() {
                     auto_print_on_accept: result.data.auto_print_on_accept || false,
                     printer_name: result.data.printer_name || '',
                     print_kot: result.data.print_kot !== undefined ? result.data.print_kot : true,
-                    print_bill: result.data.print_bill !== undefined ? result.data.print_bill : true
+                    print_bill: result.data.print_bill !== undefined ? result.data.print_bill : true,
+                    swiggy_enabled: result.data.swiggy_enabled || false,
+                    zomato_enabled: result.data.zomato_enabled || false,
+                    swiggy_merchant_id: result.data.swiggy_merchant_id || '',
+                    zomato_merchant_id: result.data.zomato_merchant_id || ''
                 });
             }
             if (routingRes.success) {
@@ -291,6 +299,110 @@ export function AdminSettings() {
                                     />
                                     <label className="font-bold text-[#4E1414]">Print Bills</label>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Online Integrations Configuration */}
+                    <div className="bg-white p-8 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                        <h3 className="text-[#4E1414] font-black text-xl mb-2 flex items-center gap-2">
+                            🚀 Swiggy & Zomato Easy Configuration
+                        </h3>
+                        <p className="text-xs text-[#241B15]/60 mb-6">Manage API Merchant IDs and active status for food aggregator integrations.</p>
+                        
+                        <div className="space-y-6">
+                            {/* Swiggy Configuration */}
+                            <div className="p-4 rounded-xl bg-[#FC8019]/5 border border-[#FC8019]/25 flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-9 h-9 rounded-lg bg-[#FC8019] text-white flex items-center justify-center font-bold text-xs shadow">S</div>
+                                        <div>
+                                            <h4 className="font-bold text-[#FC8019] text-sm">Swiggy Integration</h4>
+                                            <p className="text-[#241B15]/60 text-xs">Direct Swiggy Merchant API sync</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForm({ ...form, swiggy_enabled: !form.swiggy_enabled })}
+                                        className={`w-14 h-7 rounded-full transition-colors relative cursor-pointer ${form.swiggy_enabled ? 'bg-[#FC8019]' : 'bg-gray-300'}`}
+                                    >
+                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all ${form.swiggy_enabled ? 'left-8' : 'left-1'}`} />
+                                    </button>
+                                </div>
+                                {form.swiggy_enabled && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-[#FC8019] uppercase tracking-wider mb-1.5">
+                                                Swiggy Merchant ID
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.swiggy_merchant_id}
+                                                onChange={e => setForm({ ...form, swiggy_merchant_id: e.target.value })}
+                                                placeholder="e.g. SWIGGY-OOTY-7821"
+                                                className="w-full bg-white border border-[#FC8019]/40 rounded-xl px-3 py-2 text-xs font-bold text-[#241B15] outline-none focus:border-[#FC8019] transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-[#FC8019] uppercase tracking-wider mb-1.5">
+                                                Mock Webhook Endpoint
+                                            </label>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value="https://api.tajooty.com/v1/swiggy/webhook"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Zomato Configuration */}
+                            <div className="p-4 rounded-xl bg-[#E23744]/5 border border-[#E23744]/25 flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-9 h-9 rounded-lg bg-[#E23744] text-white flex items-center justify-center font-bold text-xs shadow">Z</div>
+                                        <div>
+                                            <h4 className="font-bold text-[#E23744] text-sm">Zomato Integration</h4>
+                                            <p className="text-[#241B15]/60 text-xs">Direct Zomato Merchant API sync</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForm({ ...form, zomato_enabled: !form.zomato_enabled })}
+                                        className={`w-14 h-7 rounded-full transition-colors relative cursor-pointer ${form.zomato_enabled ? 'bg-[#E23744]' : 'bg-gray-300'}`}
+                                    >
+                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all ${form.zomato_enabled ? 'left-8' : 'left-1'}`} />
+                                    </button>
+                                </div>
+                                {form.zomato_enabled && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-[#E23744] uppercase tracking-wider mb-1.5">
+                                                Zomato Merchant ID
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.zomato_merchant_id}
+                                                onChange={e => setForm({ ...form, zomato_merchant_id: e.target.value })}
+                                                placeholder="e.g. ZOMATO-OOTY-3490"
+                                                className="w-full bg-white border border-[#E23744]/40 rounded-xl px-3 py-2 text-xs font-bold text-[#241B15] outline-none focus:border-[#E23744] transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-[#E23744] uppercase tracking-wider mb-1.5">
+                                                Mock Webhook Endpoint
+                                            </label>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value="https://api.tajooty.com/v1/zomato/webhook"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

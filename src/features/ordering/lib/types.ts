@@ -47,6 +47,7 @@ export interface MenuItem {
     price: number;
     image_url: string | null;
     is_available: boolean;
+    stock_qty: number | null;
 }
 
 export interface Order {
@@ -57,6 +58,8 @@ export interface Order {
     status: OrderStatus;
     waiter_id: string | null;
     created_at: string;
+    token_no?: string | null;
+    source?: string;
 }
 
 export interface OrderItem {

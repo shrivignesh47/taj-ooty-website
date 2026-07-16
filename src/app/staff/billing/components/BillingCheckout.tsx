@@ -67,7 +67,7 @@ export function BillingCheckout({
     handleApplyCoupon
 }: Props) {
     return (
-        <div className="lg:col-span-4 bg-white border border-[#C9974A]/30 rounded-3xl p-5 shadow-sm sticky top-24 self-start space-y-5 min-h-[500px] flex flex-col justify-between">
+        <div className="bg-white border border-[#C9974A]/30 rounded-3xl p-5 shadow-sm space-y-5 min-h-[380px] flex flex-col justify-between">
             <AnimatePresence mode="wait">
                 {selectedTable ? (
                     <motion.div

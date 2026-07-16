@@ -346,6 +346,12 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     };
 
     const handleUpdateItemQty = (index: number, newQty: number) => {
+        const item = drawerItems[index];
+        const catalogItem = posCatalog?.menuItems.find(m => m.id === item.menu_item_id);
+        if (newQty > item.qty && catalogItem && catalogItem.stock_qty !== null && item.qty >= catalogItem.stock_qty) {
+            alert(`Sorry, only ${catalogItem.stock_qty} portions of ${catalogItem.name} are available in the kitchen!`);
+            return;
+        }
         if (newQty <= 0) {
             setDrawerItems(drawerItems.filter((_, idx) => idx !== index));
         } else {
@@ -359,8 +365,13 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
 
     const handleAddCatalogItem = (menuItem: any) => {
         const existingIdx = drawerItems.findIndex(i => i.menu_item_id === menuItem.id);
+        const currentQty = existingIdx >= 0 ? drawerItems[existingIdx].qty : 0;
+        if (menuItem.stock_qty !== null && currentQty >= menuItem.stock_qty) {
+            alert(`Sorry, only ${menuItem.stock_qty} portions of ${menuItem.name} are available in the kitchen!`);
+            return;
+        }
         if (existingIdx >= 0) {
-            handleUpdateItemQty(existingIdx, drawerItems[existingIdx].qty + 1);
+            handleUpdateItemQty(existingIdx, currentQty + 1);
         } else {
             setDrawerItems([...drawerItems, {
                 menu_item_id: menuItem.id,
@@ -488,6 +499,12 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     };
 
     const handleUpdateNewItemQty = (index: number, newQty: number) => {
+        const item = newItemsToAdd[index];
+        const catalogItem = posCatalog?.menuItems.find(m => m.id === item.menu_item_id);
+        if (newQty > item.qty && catalogItem && catalogItem.stock_qty !== null && item.qty >= catalogItem.stock_qty) {
+            alert(`Sorry, only ${catalogItem.stock_qty} portions of ${catalogItem.name} are available in the kitchen!`);
+            return;
+        }
         if (newQty <= 0) {
             setNewItemsToAdd(newItemsToAdd.filter((_, idx) => idx !== index));
         } else {
@@ -497,8 +514,13 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
 
     const handleAddNewItemToCart = (menuItem: any) => {
         const existingIdx = newItemsToAdd.findIndex(i => i.menu_item_id === menuItem.id);
+        const currentQty = existingIdx >= 0 ? newItemsToAdd[existingIdx].qty : 0;
+        if (menuItem.stock_qty !== null && currentQty >= menuItem.stock_qty) {
+            alert(`Sorry, only ${menuItem.stock_qty} portions of ${menuItem.name} are available in the kitchen!`);
+            return;
+        }
         if (existingIdx >= 0) {
-            handleUpdateNewItemQty(existingIdx, newItemsToAdd[existingIdx].qty + 1);
+            handleUpdateNewItemQty(existingIdx, currentQty + 1);
         } else {
             setNewItemsToAdd([...newItemsToAdd, {
                 menu_item_id: menuItem.id,
@@ -1268,7 +1290,14 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                                             >
                                                 <div>
                                                     <p className="font-bold text-[#241B15]">{item.name}</p>
-                                                    <p className="text-[10px] text-gray-400">{item.categories?.name || 'Dish'}</p>
+                                                    <p className="text-[10px] text-gray-400 flex items-center gap-1.5">
+                                                        <span>{item.categories?.name || 'Dish'}</span>
+                                                        {item.stock_qty !== null && (
+                                                            <span className="text-[9px] bg-amber-100 text-amber-850 border border-amber-200 px-1.5 py-0.5 rounded font-black">
+                                                                {item.stock_qty <= 3 ? `Ending: ${item.stock_qty} Left` : `${item.stock_qty} Qty`}
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-bold text-[#4E1414]">₹{item.price}</span>
@@ -1473,7 +1502,14 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                                                             >
                                                                 <div>
                                                                     <p className="font-bold text-xs text-[#241B15]">{item.name}</p>
-                                                                    <p className="text-[11px] font-black text-[#C9974A]">₹{item.price}</p>
+                                                                    <p className="text-[11px] font-black text-[#C9974A] flex items-center gap-1.5">
+                                                                        <span>₹{item.price}</span>
+                                                                        {item.stock_qty !== null && (
+                                                                            <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-black">
+                                                                                {item.stock_qty <= 3 ? `Ending: ${item.stock_qty} Left` : `${item.stock_qty} Qty`}
+                                                                            </span>
+                                                                        )}
+                                                                    </p>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
                                                                     {addedCount > 0 && (

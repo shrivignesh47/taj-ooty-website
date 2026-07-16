@@ -16,11 +16,13 @@ INSERT INTO permissions (key) VALUES
   ('view_billing'),
   ('generate_bills'),
   ('edit_menu'),
+  ('view_menu'),
   ('manage_staff'),
   ('manage_roles'),
   ('view_revenue'),
   ('export_data'),
-  ('manage_tables')
+  ('manage_tables'),
+  ('manage_gst')
 ON CONFLICT (key) DO NOTHING;
 
 -- ─── Role ↔ Permission assignments ────────────────────────────────────────────
@@ -41,7 +43,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p
-WHERE r.name = 'cashier' AND p.key IN ('view_billing', 'generate_bills')
+WHERE r.name = 'cashier' AND p.key IN ('view_billing', 'generate_bills', 'edit_menu', 'view_menu')
 ON CONFLICT DO NOTHING;
 
 -- ─── Restaurant settings default row ──────────────────────────────────────────

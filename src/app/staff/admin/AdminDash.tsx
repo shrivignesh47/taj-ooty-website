@@ -21,6 +21,7 @@ import { AdminRoles } from './components/AdminRoles';
 import { AdminAnalytics } from './components/AdminAnalytics';
 import { AdminSettings } from './components/AdminSettings';
 import { AdminExport } from './components/AdminExport';
+import { AdminGSTConfig } from './components/AdminGSTConfig';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const NAV_TABS = [
@@ -33,6 +34,7 @@ const NAV_TABS = [
     { id: 'Customers', label: 'Customers', icon: <Users className="w-4 h-4" /> },
     { id: 'Analytics', label: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'Export', label: 'Export', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'GSTConfig', label: 'GST Config', icon: <Settings className="w-4 h-4" /> },
     { id: 'Activity', label: 'Activity Log', icon: <ClipboardList className="w-4 h-4" /> },
     { id: 'Settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
 ];
@@ -51,7 +53,7 @@ const TAB_GROUPS = [
     {
         key: 'system',
         label: 'System & Analytics',
-        tabs: ['Analytics', 'Export', 'Activity', 'Settings']
+        tabs: ['Analytics', 'Export', 'GSTConfig', 'Activity', 'Settings']
     }
 ];
 
@@ -277,13 +279,14 @@ export function AdminDash() {
             case 'Overview':  return hasPerm('view_dashboard')  || hasPerm('manage_staff') || hasPerm('view_revenue');
             case 'Orders':    return hasPerm('manage_orders')   || hasPerm('view_orders')  || hasPerm('view_revenue') || hasPerm('manage_staff');
             case 'Tables':    return hasPerm('manage_orders')   || hasPerm('manage_tables')|| hasPerm('manage_staff');
-            case 'Menu':      return hasPerm('edit_menu');
+            case 'Menu':      return hasPerm('edit_menu') || hasPerm('view_menu');
             case 'Staff':     return hasPerm('manage_staff');
             case 'Roles':     return hasPerm('manage_roles');
             case 'Customers': return hasPerm('view_revenue')    || hasPerm('manage_staff');
             case 'Analytics': return hasPerm('view_revenue')    || hasPerm('manage_staff');
             case 'Activity':  return hasPerm('view_activity_log')|| hasPerm('manage_staff');
             case 'Export':    return hasPerm('view_revenue')    || hasPerm('manage_staff');
+            case 'GSTConfig': return hasPerm('manage_gst')      || hasPerm('manage_roles');
             case 'Settings':  return hasPerm('manage_staff')    || hasPerm('manage_roles');
             default:          return true;
         }
@@ -480,6 +483,7 @@ export function AdminDash() {
                                     handleDeleteMenu={handleDeleteMenu}
                                     setEditForm={setEditForm}
                                     onMenuUpdated={fetchData}
+                                    readOnly={!hasPerm('edit_menu')}
                                 />
                             </motion.div>
                         )}
@@ -517,6 +521,11 @@ export function AdminDash() {
                         {activeTab === 'Settings' && (
                             <motion.div key="sets" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
                                 <AdminSettings />
+                            </motion.div>
+                        )}
+                        {activeTab === 'GSTConfig' && (
+                            <motion.div key="gst" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminGSTConfig />
                             </motion.div>
                         )}
                         {activeTab === 'Export' && (

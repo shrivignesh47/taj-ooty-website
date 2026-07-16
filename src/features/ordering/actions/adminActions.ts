@@ -159,19 +159,42 @@ export async function bulkAddMenuItems(items: { name: string, price: number, cat
         (insertedCats || []).forEach(c => catMap.set(c.name.toLowerCase(), c.id));
     }
 
-    // 4. Insert menu items
-    const menuPayloads = items.map(i => ({
-        name: i.name,
-        price: i.price,
-        category_id: catMap.get(i.category.toLowerCase()),
-        is_available: true
-    }));
+    // 4. Fetch existing menu items
+    const { data: existingItems } = await admin
+        .from('menu_items')
+        .select('name, category_id');
+        
+    const existingItemKeys = new Set(
+        (existingItems || []).map(item => `${item.name.toLowerCase().trim()}_${item.category_id}`)
+    );
 
-    const { error } = await admin.from('menu_items').insert(menuPayloads);
+    // 5. Filter out incoming items that already exist
+    const itemsToInsert: any[] = [];
+    for (const item of items) {
+        const catId = catMap.get(item.category.toLowerCase());
+        const key = `${item.name.toLowerCase().trim()}_${catId}`;
+        if (!existingItemKeys.has(key)) {
+            itemsToInsert.push({
+                name: item.name,
+                price: item.price,
+                category_id: catId,
+                is_available: true
+            });
+            // Prevent duplicates within the same batch upload
+            existingItemKeys.add(key);
+        }
+    }
+
+    if (itemsToInsert.length === 0) {
+        revalidatePath('/staff/admin');
+        return { success: true, count: 0, message: 'All items already exist in the database' };
+    }
+
+    const { error } = await admin.from('menu_items').insert(itemsToInsert);
     if (error) return { success: false, error: error.message };
 
     revalidatePath('/staff/admin');
-    return { success: true };
+    return { success: true, count: itemsToInsert.length };
 }
 
 // ─── Activity Log ────────────────────────────────────────────────────────────
@@ -241,6 +264,10 @@ export async function saveRestaurantSettings(payload: {
     print_kot: boolean;
     print_bill: boolean;
     station_routing_enabled?: boolean;
+    swiggy_enabled?: boolean;
+    zomato_enabled?: boolean;
+    swiggy_merchant_id?: string;
+    zomato_merchant_id?: string;
 }) {
     const auth = await verifyStaff();
     if (!auth.success || !auth.user) {
@@ -405,5 +432,112 @@ export async function deleteOrder(orderId: string) {
         return { success: true };
     } catch (e: unknown) {
         return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+}
+
+// Simulate an incoming Swiggy or Zomato order in the database in real time
+export async function simulateOnlineOrder(source: 'swiggy' | 'zomato') {
+    const auth = await verifyStaff();
+    if (!auth.success) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    try {
+        // Fetch a few random menu items to populate the order
+        const { data: menuItems } = await admin
+            .from('menu_items')
+            .select('id, name, price')
+            .limit(3);
+
+        if (!menuItems || menuItems.length === 0) {
+            return { success: false, error: 'Please seed or add menu items first before simulating orders' };
+        }
+
+        const guestNo = Math.floor(100 + Math.random() * 900);
+        const customerName = source === 'swiggy' ? `Swiggy #${guestNo}` : `Zomato #${guestNo}`;
+
+        const { data: order, error: orderErr } = await admin
+            .from('orders')
+            .insert({
+                customer_name: customerName,
+                customer_phone: '9999988888',
+                status: 'pending',
+                source
+            })
+            .select()
+            .single();
+
+        if (orderErr) throw orderErr;
+
+        // Choose 1 or 2 items
+        const numItems = Math.floor(1 + Math.random() * 2);
+        const itemsToInsert = menuItems.slice(0, numItems).map(item => ({
+            order_id: order.id,
+            menu_item_id: item.id,
+            qty: Math.floor(1 + Math.random() * 2),
+            price_at_order: item.price
+        }));
+
+        const { error: itemsErr } = await admin.from('order_items').insert(itemsToInsert);
+        if (itemsErr) throw itemsErr;
+
+        revalidatePath('/staff/dashboard');
+        return { success: true };
+    } catch (err: any) {
+        return { success: false, error: err.message };
+    }
+}
+
+export async function createTakeawayOrder(payload: {
+    customer_name: string;
+    customer_phone: string;
+    token_no: string;
+    status: 'pending' | 'confirmed' | 'preparing';
+    items: { menu_item_id: string; qty: number; price: number; notes?: string }[];
+}) {
+    const auth = await verifyStaff();
+    if (!auth.success || !auth.user) {
+        return { success: false, error: 'Unauthorized Session' };
+    }
+
+    try {
+        const { data: order, error: orderErr } = await admin
+            .from('orders')
+            .insert({
+                customer_name: payload.customer_name || 'Takeaway Guest',
+                customer_phone: payload.customer_phone || '0000000000',
+                status: payload.status,
+                source: 'takeaway',
+                token_no: payload.token_no,
+                waiter_id: auth.user.id
+            })
+            .select()
+            .single();
+
+        if (orderErr) throw orderErr;
+
+        const orderItemsPayload = payload.items.map(item => ({
+            order_id: order.id,
+            menu_item_id: item.menu_item_id,
+            qty: item.qty,
+            price_at_order: item.price,
+            notes: item.notes || null
+        }));
+
+        const { error: itemsErr } = await admin.from('order_items').insert(orderItemsPayload);
+        if (itemsErr) throw itemsErr;
+
+        // Log status history
+        await admin.from('order_status_history').insert({
+            order_id: order.id,
+            status: payload.status,
+            changed_by: auth.user.id
+        });
+
+        revalidatePath('/staff/dashboard');
+        revalidatePath('/staff/kitchen');
+        return { success: true, orderId: order.id };
+    } catch (e: any) {
+        return { success: false, error: e.message };
     }
 }

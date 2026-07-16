@@ -67,6 +67,8 @@ export function useBillingState(activeUser: any) {
 
     // Takeaway Orders (Not tied to table)
     const [takeawayOrders, setTakeawayOrders] = useState<CashierOrder[]>([]);
+    const [onlineOrders, setOnlineOrders] = useState<CashierOrder[]>([]);
+    const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
 
     // Sliding Sidebar state
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -76,8 +78,8 @@ export function useBillingState(activeUser: any) {
     const [settings, setSettings] = useState({
         printerSize: '80mm',
         autoPrint: true,
-        chargeServiceTax: true,
-        serviceChargeRate: 10,
+        chargeServiceTax: false,
+        serviceChargeRate: 0,
         gstRate: 5,
         isGstInclusive: false,
         headerNote: 'Hotel Taj Ooty',
@@ -104,16 +106,16 @@ export function useBillingState(activeUser: any) {
     const canSettleBills = hasPerm('generate_bills');
 
     const loadData = useCallback(async () => {
-        const [tablesRes, activeRes, historyRes, menuItemsRes, staffRes, attendanceRes, rolesRes] = await Promise.all([
+        const [tablesRes, activeRes, historyRes, menuItemsRes, staffRes, attendanceRes, rolesRes, settingsRes] = await Promise.all([
             supabase.from('restaurant_tables').select('id, table_no, assigned_waiter_id').order('table_no'),
             supabase.from('orders')
-                .select(`id, status, created_at, customer_name, customer_phone, table_id,
+                .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
                     restaurant_tables(id, table_no),
                     order_items(id, qty, price_at_order, notes, menu_items(name, is_veg, id))`)
-                .in('status', ['confirmed', 'preparing', 'ready', 'served'])
+                .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served'])
                 .order('created_at', { ascending: true }),
             supabase.from('orders')
-                .select(`id, status, created_at, customer_name, customer_phone, table_id,
+                .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
                     restaurant_tables(id, table_no),
                     order_items(id, qty, price_at_order, notes, menu_items(name, is_veg, id))`)
                 .eq('status', 'billed')
@@ -122,7 +124,8 @@ export function useBillingState(activeUser: any) {
             supabase.from('menu_items').select('*, categories(id, name)').order('name'),
             supabase.from('staff_users').select('*, roles(name)').order('name'),
             supabase.from('staff_attendance').select('id, staff_id, clock_in, clock_out, staff_users(name)').order('clock_in', { ascending: false }).limit(20),
-            supabase.from('roles').select('id, name').order('name')
+            supabase.from('roles').select('id, name').order('name'),
+            supabase.from('restaurant_settings').select('*').limit(1).maybeSingle()
         ]);
 
         // Realtime dynamic permissions fetch
@@ -168,6 +171,10 @@ export function useBillingState(activeUser: any) {
             }
         }
 
+        if (settingsRes && settingsRes.data) {
+            setRestaurantSettings(settingsRes.data);
+        }
+
         const rawTables = tablesRes.data ?? [];
         const rawOrders = (activeRes.data ?? []) as unknown as CashierOrder[];
         const rawHistory = (historyRes.data ?? []) as unknown as CashierOrder[];
@@ -191,9 +198,12 @@ export function useBillingState(activeUser: any) {
             setAttendanceLogs(mappedAttendance);
         }
 
-        const activeDineIn = rawOrders.filter(o => o.table_id !== null);
-        const activeTakeaway = rawOrders.filter(o => o.table_id === null);
+        const activeDineIn = rawOrders.filter(o => (o.source === 'dine_in' || !o.source) && o.table_id !== null);
+        const activeTakeaway = rawOrders.filter(o => o.source === 'takeaway' || (!o.source && o.table_id === null));
+        const activeOnline = rawOrders.filter(o => o.source === 'swiggy' || o.source === 'zomato');
         setTakeawayOrders(activeTakeaway);
+        setOnlineOrders(activeOnline);
+        setActiveOrders(rawOrders);
 
         const enriched: TableView[] = rawTables.map((t: any) => {
             const tOrders = activeDineIn.filter(o => o.table_id === t.id);
@@ -281,11 +291,30 @@ export function useBillingState(activeUser: any) {
         setExpectedCash(openingFloat + cash - expenseTotal);
 
         if (selectedTable) {
-            const currentSelected = enriched.find(t => t.id === selectedTable.id);
-            if (currentSelected && currentSelected.status !== 'Empty') {
-                setSelectedTable(currentSelected);
+            if (selectedTable.table_no === 0) {
+                const currentOrder = rawOrders.find(o => o.id === selectedTable.id);
+                if (currentOrder) {
+                    const total = orderTotal(currentOrder);
+                    setSelectedTable({
+                        id: currentOrder.id,
+                        table_no: 0,
+                        status: 'Awaiting Settlement',
+                        currentBill: total,
+                        customer_name: currentOrder.customer_name,
+                        customer_phone: currentOrder.customer_phone ?? undefined,
+                        orders: [currentOrder],
+                        latestStatus: currentOrder.status
+                    });
+                } else {
+                    setSelectedTable(null);
+                }
             } else {
-                setSelectedTable(null);
+                const currentSelected = enriched.find(t => t.id === selectedTable.id);
+                if (currentSelected && currentSelected.status !== 'Empty') {
+                    setSelectedTable(currentSelected);
+                } else {
+                    setSelectedTable(null);
+                }
             }
         }
 
@@ -298,6 +327,7 @@ export function useBillingState(activeUser: any) {
         const ch = supabase.channel('cashier-petpooja-v4-realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadData)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, loadData)
             .subscribe();
         return () => { supabase.removeChannel(ch); };
     }, [loadData]);
@@ -337,13 +367,13 @@ export function useBillingState(activeUser: any) {
             const totalGst = taxableAmount - baseAmount;
             cgst = totalGst / 2;
             sgst = totalGst / 2;
-            service = settings.chargeServiceTax ? baseAmount * (settings.serviceChargeRate / 100) : 0;
-            grand = taxableAmount + service;
+            service = 0;
+            grand = taxableAmount;
         } else {
             cgst = taxableAmount * (splitRate / 100);
             sgst = taxableAmount * (splitRate / 100);
-            service = settings.chargeServiceTax ? taxableAmount * (settings.serviceChargeRate / 100) : 0;
-            grand = taxableAmount + cgst + sgst + service;
+            service = 0;
+            grand = taxableAmount + cgst + sgst;
         }
 
         return { allItems, subtotal, discountAmt, taxableAmount, cgst, sgst, service, grand };
@@ -363,6 +393,7 @@ export function useBillingState(activeUser: any) {
 
     const handlePrintBill = (t: TableView) => {
         const calc = getCheckoutCalculation(t);
+        const token = t.orders?.[0]?.token_no;
         const w = window.open('', '_blank', 'width=380,height=600');
         if (!w) return;
         const now = new Date();
@@ -381,7 +412,7 @@ export function useBillingState(activeUser: any) {
 <h1>${settings.headerNote}</h1>
 <p class="center sub">Hotel Taj Ooty</p>
 <div class="sep"></div>
-<div class="row"><span>Table: <b>T-${t.table_no}</b></span><span>${now.toLocaleDateString()}</span></div>
+<div class="row"><span>${token ? `Token No: <b>${token}</b>` : `Table: <b>T-${t.table_no}</b>`}</span><span>${now.toLocaleDateString()}</span></div>
 <div class="row"><span>Guest: ${t.customer_name ?? 'Guest'}</span><span>${now.toLocaleTimeString()}</span></div>
 <div class="sep"></div>
 <div class="row bold"><span>Item</span><span>Qty × Rate</span><span>Amt</span></div>
@@ -392,7 +423,6 @@ ${calc.allItems.map(i => `<div class="row"><span>${i.name}</span><span>${i.qty}�
 ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(0)}</span></div>` : ''}
 <div class="row"><span>CGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.cgst.toFixed(0)}</span></div>
 <div class="row"><span>SGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.sgst.toFixed(0)}</span></div>
-${settings.chargeServiceTax ? `<div class="row"><span>Service Fee (${settings.serviceChargeRate}%)</span><span>₹${calc.service.toFixed(0)}</span></div>` : ''}
 <div class="sep"></div>
 <div class="row big"><span>GRAND TOTAL</span><span>₹${calc.grand.toFixed(0)}</span></div>
 <div class="sep"></div>
@@ -426,13 +456,26 @@ ${settings.chargeServiceTax ? `<div class="row"><span>Service Fee (${settings.se
     };
 
     const handleToggleItemStock = async (itemId: string, currentVal: boolean) => {
-        if (!hasPerm('manage_inventory')) {
-            triggerPermissionDenied('manage_inventory');
+        if (!hasPerm('view_menu') && !hasPerm('manage_inventory')) {
+            triggerPermissionDenied('view_menu');
             return;
         }
         const { error } = await supabase.from('menu_items').update({ is_available: !currentVal }).eq('id', itemId);
         if (error) {
             alert('Failed to update availability');
+        } else {
+            loadData();
+        }
+    };
+
+    const handleUpdateMenuStock = async (itemId: string, isAvailable: boolean, qty: number | null) => {
+        if (!hasPerm('view_menu') && !hasPerm('manage_inventory')) {
+            triggerPermissionDenied('view_menu');
+            return;
+        }
+        const { error } = await supabase.from('menu_items').update({ is_available: isAvailable, stock_qty: qty }).eq('id', itemId);
+        if (error) {
+            alert('Failed to update stock');
         } else {
             loadData();
         }
@@ -485,7 +528,7 @@ ${settings.chargeServiceTax ? `<div class="row"><span>Service Fee (${settings.se
             return;
         }
         setIsSidebarOpen(false);
-        if (['bento', 'tables', 'takeaway', 'history', 'reports'].includes(actionId)) {
+        if (['bento', 'tables', 'takeaway', 'history', 'reports', 'online_orders', 'stock_inventory'].includes(actionId)) {
             setView(actionId as MainView);
         } else {
             setActiveOpModal(actionId);
@@ -519,6 +562,31 @@ ${settings.chargeServiceTax ? `<div class="row"><span>Service Fee (${settings.se
         setActiveOpModal(null);
     };
 
+    const toggleAggregator = async (aggregator: 'swiggy' | 'zomato') => {
+        if (!restaurantSettings) return;
+        const key = `${aggregator}_enabled`;
+        const updatedVal = !restaurantSettings[key];
+        
+        // Optimistic local state update
+        const updated = {
+            ...restaurantSettings,
+            [key]: updatedVal
+        };
+        setRestaurantSettings(updated);
+
+        // Persistent update in database
+        const { error } = await supabase
+            .from('restaurant_settings')
+            .update({ [key]: updatedVal })
+            .eq('id', restaurantSettings.id);
+
+        if (error) {
+            alert(`Failed to toggle ${aggregator} setting: ${error.message}`);
+            // Rollback optimistic state
+            setRestaurantSettings(restaurantSettings);
+        }
+    };
+
     return {
         view, setView, tables, setTables, activeOrders, history, menuItemsList,
         guests, staffList, attendanceLogs, loading, refreshing, setRefreshing,
@@ -529,12 +597,12 @@ ${settings.chargeServiceTax ? `<div class="row"><span>Service Fee (${settings.se
         dayStats, isRegisterOpen, setIsRegisterOpen, openingFloat, setOpeningFloat,
         expectedCash, actualClosingCash, setActualClosingCash, registerLogs,
         expenses, newExpensePurpose, setNewExpensePurpose, newExpenseAmount, setNewExpenseAmount,
-        takeawayOrders, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
+        takeawayOrders, onlineOrders, restaurantSettings, toggleAggregator, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
         settings, setSettings, activeOpModal, setActiveOpModal, deniedPermission, setDeniedPermission,
         selectedReport, setSelectedReport, attendanceStaffId, setAttendanceStaffId, rolesList,
         hasPerm, canApplyDiscount, canSettleBills, loadData, handleSelectTable,
         getCheckoutCalculation, handleApplyCoupon, handlePrintBill, handleSettlePayment,
-        handleToggleItemStock, handleStaffAttendance, triggerPermissionDenied,
+        handleToggleItemStock, handleStaffAttendance, handleUpdateMenuStock, triggerPermissionDenied,
         handleSidebarAction, handleAddExpense, handleCloseSession
     };
 }

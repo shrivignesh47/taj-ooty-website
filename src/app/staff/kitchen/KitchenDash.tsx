@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChefHat, CheckCircle2, Flame, Loader2, Printer, Volume2, VolumeX, Settings, Maximize2, Minimize2, Search, History, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChefHat, CheckCircle2, Flame, Loader2, Printer, Volume2, VolumeX, Settings, Maximize2, Minimize2, Search, History, ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { fetchRestaurantSettings, saveKdsConfig } from '@/features/ordering/actions/adminActions';
 import { advanceOrderStatus, markKitchenOrderReady, startKitchenOrder, toggleOrderItemDone } from '@/features/ordering/actions/updateOrderStatus';
@@ -140,7 +140,7 @@ export function printKOT(order: LiveOrder) {
       <div class="header">
         <div class="hotel-name">HOTEL TAJ OOTY</div>
         <div class="kot-no">KOT #${kotNo}</div>
-        <div class="table-info">Table: T-${tableNo} | ${customerName}</div>
+        <div class="table-info">${order.token_no ? `Token No: ${order.token_no}` : `Table: T-${tableNo}`} | ${customerName}</div>
         <div class="table-info">${timeStr}</div>
       </div>
       <div class="items">
@@ -216,6 +216,47 @@ export function KitchenDash() {
     const seenConfirmedRef = useRef<Set<string>>(new Set());
     const alertedOverdueRef = useRef<Set<string>>(new Set());
 
+    // Menu stock states
+    const [isMenuStockOpen, setIsMenuStockOpen] = useState(false);
+    const [menuItems, setMenuItems] = useState<any[]>([]);
+    const [togglingMenuId, setTogglingMenuId] = useState<string | null>(null);
+
+    const fetchMenu = useCallback(async () => {
+        const { data, error } = await supabase
+            .from('menu_items')
+            .select(`
+                id,
+                name,
+                price,
+                is_available,
+                is_veg,
+                category_id,
+                stock_qty
+            `)
+            .order('name');
+        if (!error && data) {
+            setMenuItems(data);
+        }
+    }, []);
+
+    const handleUpdateStock = useCallback(async (itemId: string, isAvailable: boolean, qty: number | null) => {
+        if (togglingMenuId) return;
+        setTogglingMenuId(itemId);
+        const { error } = await supabase
+            .from('menu_items')
+            .update({
+                is_available: isAvailable,
+                stock_qty: qty
+            })
+            .eq('id', itemId);
+        if (error) {
+            alert(`Failed to update stock: ${error.message}`);
+        } else {
+            setMenuItems(prev => prev.map(item => item.id === itemId ? { ...item, is_available: isAvailable, stock_qty: qty } : item));
+        }
+        setTogglingMenuId(null);
+    }, [togglingMenuId]);
+
     const [activeFilter, setActiveFilter] = useState<string>('All');
     const [activeStation, setActiveStation] = useState<string>('All Stations');
     const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -264,11 +305,11 @@ export function KitchenDash() {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen()
                 .then(() => setIsFullscreen(true))
-                .catch(() => {});
+                .catch(() => { });
         } else {
             document.exitFullscreen()
                 .then(() => setIsFullscreen(false))
-                .catch(() => {});
+                .catch(() => { });
         }
     };
 
@@ -486,8 +527,8 @@ export function KitchenDash() {
                 }
 
                 if (payload.eventType === 'INSERT' ||
-                   (payload.eventType === 'UPDATE' &&
-                    ['confirmed', 'preparing', 'ready', 'on_hold'].includes(newRow.status ?? ''))
+                    (payload.eventType === 'UPDATE' &&
+                        ['confirmed', 'preparing', 'ready', 'on_hold'].includes(newRow.status ?? ''))
                 ) {
                     refetchOrders();
                     if (payload.eventType === 'INSERT' && soundEnabled && kdsSettings.soundNewOrder) {
@@ -506,11 +547,25 @@ export function KitchenDash() {
             }, () => refetchItemStatuses())
             .subscribe();
 
+        const menuItemsChannel = supabase
+            .channel('kds-menu-items')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'menu_items'
+            }, () => fetchMenu())
+            .subscribe();
+
         return () => {
             supabase.removeChannel(channel);
             supabase.removeChannel(itemStatusChannel);
+            supabase.removeChannel(menuItemsChannel);
         };
-    }, [refetchOrders, refetchItemStatuses, soundEnabled, kdsSettings.soundNewOrder, kdsSettings.autoPrintOnConfirm, kdsSettings.printEnabled]);
+    }, [refetchOrders, refetchItemStatuses, fetchMenu, soundEnabled, kdsSettings.soundNewOrder, kdsSettings.autoPrintOnConfirm, kdsSettings.printEnabled]);
+
+    useEffect(() => {
+        fetchMenu();
+    }, [fetchMenu]);
 
     useEffect(() => {
         if (!kdsSettings.autoBump) return;
@@ -536,7 +591,7 @@ export function KitchenDash() {
     }
 
     return (
-        <div className="flex flex-col w-full min-h-screen bg-[#241B15]">
+        <div className="flex flex-col w-full min-h-screen bg-[#F6EEDF]">
             {/* Header (sticky, bg-[#1a0a0a], h-14) */}
             <header className="sticky top-0 z-40 bg-[#1a0a0a] h-14 border-b border-[#C9974A]/20 px-4 lg:px-6 flex items-center justify-between shadow-md">
                 {/* Left: "🍳 Kitchen Display" text white + station dropdown */}
@@ -547,7 +602,7 @@ export function KitchenDash() {
                     <h1 className="text-white font-black text-base md:text-lg tracking-wide flex items-center gap-2 select-none">
                         🍳 Kitchen Display
                     </h1>
-                    
+
                     <select
                         value={activeStation}
                         onChange={(e) => setActiveStation(e.target.value)}
@@ -574,11 +629,10 @@ export function KitchenDash() {
                     <button
                         onClick={() => setActiveFilter(activeFilter === 'History' ? 'All' : 'History')}
                         title="Open KOT Order History & Search"
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-sm active:scale-95 ${
-                            activeFilter === 'History'
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-sm active:scale-95 ${activeFilter === 'History'
                                 ? 'bg-[#C9974A] text-[#1a0a0a] border-[#C9974A] shadow-md scale-102'
                                 : 'bg-[#2a0f0f] text-[#C9974A] border-[#C9974A]/30 hover:bg-[#3d1616]'
-                        }`}
+                            }`}
                     >
                         <History className="w-3.5 h-3.5" />
                         <span className="hidden md:inline">History</span>
@@ -593,6 +647,15 @@ export function KitchenDash() {
                         className="flex items-center justify-center p-2 rounded-lg bg-[#2a0f0f] hover:bg-[#3d1616] text-[#C9974A] border border-[#C9974A]/30 transition-all shadow-sm active:scale-95"
                     >
                         {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-red-400" />}
+                    </button>
+
+                    <button
+                        onClick={() => setIsMenuStockOpen(true)}
+                        title="Menu Stock Availability"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border border-[#C9974A]/30 bg-[#2a0f0f] hover:bg-[#3d1616] text-[#C9974A] shadow-sm active:scale-95"
+                    >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span className="hidden md:inline">Menu Stock</span>
                     </button>
 
                     <button
@@ -612,11 +675,10 @@ export function KitchenDash() {
                     </button>
 
                     <div
-                        className={`flex items-center gap-1.5 ml-1 px-2.5 py-1 rounded-full text-[11px] font-black tracking-wider shadow-inner border ${
-                            isConnected
+                        className={`flex items-center gap-1.5 ml-1 px-2.5 py-1 rounded-full text-[11px] font-black tracking-wider shadow-inner border ${isConnected
                                 ? 'bg-green-950/70 border-green-500/40 text-green-400'
                                 : 'bg-red-950/70 border-red-500/40 text-red-400'
-                        }`}
+                            }`}
                         title={isConnected ? 'Realtime Connected' : 'Disconnected / Polling'}
                     >
                         <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
@@ -634,19 +696,17 @@ export function KitchenDash() {
                         <button
                             key={filter}
                             onClick={() => setActiveFilter(filter)}
-                            className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs transition-all shrink-0 cursor-pointer ${
-                                isActive
+                            className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs transition-all shrink-0 cursor-pointer ${isActive
                                     ? 'bg-[#C9974A] text-[#1a0a0a] font-black shadow-md border border-[#C9974A] scale-102'
                                     : 'bg-[#1a0a0a]/80 text-[#F6EEDF] font-bold hover:bg-[#3d1616] border border-[#C9974A]/20'
-                            }`}
+                                }`}
                         >
                             <span>{filter}</span>
                             <span
-                                className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                    isActive
+                                className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${isActive
                                         ? 'bg-[#1a0a0a] text-[#C9974A] shadow-2xs'
                                         : 'bg-[#2a0f0f] text-[#C9974A]'
-                                }`}
+                                    }`}
                             >
                                 {count}
                             </span>
@@ -657,21 +717,19 @@ export function KitchenDash() {
 
             {/* Ticket Columns */}
             <div
-                className={`p-6 lg:p-8 grid gap-8 max-w-7xl mx-auto w-full ${
-                    kdsSettings.fontSize === 'sm' ? 'text-sm' : kdsSettings.fontSize === 'lg' ? 'text-lg' : 'text-base'
-                } ${
-                    activeFilter === 'History'
+                className={`p-6 lg:p-8 grid gap-8 max-w-7xl mx-auto w-full ${kdsSettings.fontSize === 'sm' ? 'text-sm' : kdsSettings.fontSize === 'lg' ? 'text-lg' : 'text-base'
+                    } ${activeFilter === 'History'
                         ? 'grid-cols-1 max-w-6xl'
                         : kdsSettings.ticketView === 'list'
-                        ? 'grid-cols-1 max-w-4xl'
-                        : kdsSettings.ticketView === 'allday'
-                        ? 'grid-cols-1 max-w-5xl'
-                        : activeFilter === 'On Hold'
-                        ? 'grid-cols-1 lg:grid-cols-3'
-                        : (activeFilter === 'All' && onHoldOrders.length > 0)
-                        ? 'grid-cols-1 lg:grid-cols-3'
-                        : 'grid-cols-1 lg:grid-cols-2'
-                }`}
+                            ? 'grid-cols-1 max-w-4xl'
+                            : kdsSettings.ticketView === 'allday'
+                                ? 'grid-cols-1 max-w-5xl'
+                                : activeFilter === 'On Hold'
+                                    ? 'grid-cols-1 lg:grid-cols-3'
+                                    : (activeFilter === 'All' && onHoldOrders.length > 0)
+                                        ? 'grid-cols-1 lg:grid-cols-3'
+                                        : 'grid-cols-1 lg:grid-cols-2'
+                    }`}
             >
                 {activeFilter === 'History' ? (
                     <HistoryMenu
@@ -838,6 +896,14 @@ export function KitchenDash() {
                 onSave={handleSaveSettings}
                 saving={savingSettings}
             />
+
+            <MenuStockDrawer
+                isOpen={isMenuStockOpen}
+                onClose={() => setIsMenuStockOpen(false)}
+                menuItems={menuItems}
+                onUpdateStock={handleUpdateStock}
+                togglingId={togglingMenuId}
+            />
         </div>
     );
 }
@@ -974,11 +1040,10 @@ function HistoryMenu({
                             <button
                                 key={st}
                                 onClick={() => setStatusFilter(st)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
-                                    statusFilter === st
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${statusFilter === st
                                         ? 'bg-[#C9974A] text-[#1a0a0a]'
                                         : 'text-gray-400 hover:text-white'
-                                }`}
+                                    }`}
                             >
                                 {st}
                             </button>
@@ -1042,7 +1107,7 @@ function HistoryMenu({
                                             <span>KOT #{shortId}</span>
                                             <span className="text-gray-600">•</span>
                                             <span className="text-[#C9974A] bg-[#2a0f0f] px-2 py-0.5 rounded border border-[#C9974A]/30 text-xs">
-                                                Table T-{tableNo}
+                                                {o.token_no ? `${o.token_no}` : `Table T-${tableNo}`}
                                             </span>
                                         </div>
                                         {o.customer_name && (
@@ -1287,13 +1352,22 @@ function KitchenTicketCard({
             {/* Header */}
             <div className="flex items-start justify-between border-b border-gray-200 pb-3 mb-3 text-[#1a0a0a]">
                 <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-lg">
-                            T-{order.restaurant_tables?.table_no ?? '?'}
+                            {order.token_no ? `${order.token_no}` : `T-${order.restaurant_tables?.table_no ?? '?'}`}
                         </span>
                         <span className="font-bold text-sm text-gray-800 truncate max-w-[140px]">
                             {order.customer_name || 'Guest'}
                         </span>
+                        {order.source === 'takeaway' && (
+                            <span className="bg-amber-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Parcel</span>
+                        )}
+                        {order.source === 'swiggy' && (
+                            <span className="bg-[#FC8019] text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Swiggy</span>
+                        )}
+                        {order.source === 'zomato' && (
+                            <span className="bg-[#E23744] text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Zomato</span>
+                        )}
                     </div>
                     <div className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-2">
                         <span>KOT #{kotNumber}</span>
@@ -1361,11 +1435,10 @@ function KitchenTicketCard({
                             {/* Notes field: if order_items.notes not empty → show below item in amber bg-amber-50 rounded pill, bold red if contains "spicy"/"no onion"/"no garlic"/"jain"/"dairy" */}
                             {hasNotes && (
                                 <div
-                                    className={`mt-1.5 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border ${
-                                        isWarningNote
+                                    className={`mt-1.5 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border ${isWarningNote
                                             ? 'bg-amber-50 border-amber-300 text-[#ef4444] font-black'
                                             : 'bg-amber-50 border-amber-200 text-amber-900 font-semibold'
-                                    } text-xs`}
+                                        } text-xs`}
                                 >
                                     <span className="shrink-0 text-amber-600 font-bold">⚠</span>
                                     <span className="break-words">{item.notes}</span>
@@ -1580,11 +1653,10 @@ function SettingsDrawerContent({
                                                 key={v}
                                                 type="button"
                                                 onClick={() => setDraft((p) => ({ ...p, ticketView: v }))}
-                                                className={`py-1.5 rounded-lg text-xs font-black capitalize transition-all cursor-pointer ${
-                                                    draft.ticketView === v
+                                                className={`py-1.5 rounded-lg text-xs font-black capitalize transition-all cursor-pointer ${draft.ticketView === v
                                                         ? 'bg-[#C9974A] text-[#1a0a0a] shadow-xs'
                                                         : 'text-gray-400 hover:text-white'
-                                                }`}
+                                                    }`}
                                             >
                                                 {v === 'allday' ? 'All-Day' : v}
                                             </button>
@@ -1600,11 +1672,10 @@ function SettingsDrawerContent({
                                                 key={s}
                                                 type="button"
                                                 onClick={() => setDraft((p) => ({ ...p, fontSize: s }))}
-                                                className={`py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${
-                                                    draft.fontSize === s
+                                                className={`py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${draft.fontSize === s
                                                         ? 'bg-[#C9974A] text-[#1a0a0a] shadow-xs'
                                                         : 'text-gray-400 hover:text-white'
-                                                }`}
+                                                    }`}
                                             >
                                                 {s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L'}
                                             </button>
@@ -1620,14 +1691,12 @@ function SettingsDrawerContent({
                                     <button
                                         type="button"
                                         onClick={() => setDraft((p) => ({ ...p, autoBump: !p.autoBump }))}
-                                        className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                                            draft.autoBump ? 'bg-[#C9974A]' : 'bg-gray-700'
-                                        }`}
+                                        className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${draft.autoBump ? 'bg-[#C9974A]' : 'bg-gray-700'
+                                            }`}
                                     >
                                         <div
-                                            className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                                                draft.autoBump ? 'translate-x-5' : 'translate-x-0'
-                                            }`}
+                                            className={`w-5 h-5 rounded-full bg-white transition-transform ${draft.autoBump ? 'translate-x-5' : 'translate-x-0'
+                                                }`}
                                         />
                                     </button>
                                 </div>
@@ -1647,11 +1716,10 @@ function SettingsDrawerContent({
                                                 key={dir}
                                                 type="button"
                                                 onClick={() => setDraft((p) => ({ ...p, timerDirection: dir }))}
-                                                className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                                                    draft.timerDirection === dir
+                                                className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${draft.timerDirection === dir
                                                         ? 'bg-[#C9974A] text-[#1a0a0a] shadow-xs'
                                                         : 'text-gray-400 hover:text-white'
-                                                }`}
+                                                    }`}
                                             >
                                                 {dir === 'up' ? 'Count Up' : 'Count Down'}
                                             </button>
@@ -1690,14 +1758,12 @@ function SettingsDrawerContent({
                                         <button
                                             type="button"
                                             onClick={() => setDraft((p) => ({ ...p, soundNewOrder: !p.soundNewOrder }))}
-                                            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                                                draft.soundNewOrder ? 'bg-[#C9974A]' : 'bg-gray-700'
-                                            }`}
+                                            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${draft.soundNewOrder ? 'bg-[#C9974A]' : 'bg-gray-700'
+                                                }`}
                                         >
                                             <div
-                                                className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                                                    draft.soundNewOrder ? 'translate-x-5' : 'translate-x-0'
-                                                }`}
+                                                className={`w-5 h-5 rounded-full bg-white transition-transform ${draft.soundNewOrder ? 'translate-x-5' : 'translate-x-0'
+                                                    }`}
                                             />
                                         </button>
                                     </div>
@@ -1707,14 +1773,12 @@ function SettingsDrawerContent({
                                         <button
                                             type="button"
                                             onClick={() => setDraft((p) => ({ ...p, soundOverdue: !p.soundOverdue }))}
-                                            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                                                draft.soundOverdue ? 'bg-[#C9974A]' : 'bg-gray-700'
-                                            }`}
+                                            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${draft.soundOverdue ? 'bg-[#C9974A]' : 'bg-gray-700'
+                                                }`}
                                         >
                                             <div
-                                                className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                                                    draft.soundOverdue ? 'translate-x-5' : 'translate-x-0'
-                                                }`}
+                                                className={`w-5 h-5 rounded-full bg-white transition-transform ${draft.soundOverdue ? 'translate-x-5' : 'translate-x-0'
+                                                    }`}
                                             />
                                         </button>
                                     </div>
@@ -1773,14 +1837,12 @@ function SettingsDrawerContent({
                                         <span className="font-bold text-gray-200">Enable printing</span>
                                         <div
                                             onClick={() => setDraft((p) => ({ ...p, printEnabled: !(p.printEnabled ?? true) }))}
-                                            className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
-                                                (draft.printEnabled ?? true) ? 'bg-[#C9974A]' : 'bg-gray-700'
-                                            }`}
+                                            className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${(draft.printEnabled ?? true) ? 'bg-[#C9974A]' : 'bg-gray-700'
+                                                }`}
                                         >
                                             <div
-                                                className={`w-5 h-5 rounded-full bg-[#1a0a0a] transition-transform ${
-                                                    (draft.printEnabled ?? true) ? 'translate-x-5' : 'translate-x-0'
-                                                }`}
+                                                className={`w-5 h-5 rounded-full bg-[#1a0a0a] transition-transform ${(draft.printEnabled ?? true) ? 'translate-x-5' : 'translate-x-0'
+                                                    }`}
                                             />
                                         </div>
                                     </label>
@@ -1790,14 +1852,12 @@ function SettingsDrawerContent({
                                             <span className="font-bold text-gray-200">Auto-print on confirm</span>
                                             <div
                                                 onClick={() => setDraft((p) => ({ ...p, autoPrintOnConfirm: !p.autoPrintOnConfirm }))}
-                                                className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
-                                                    draft.autoPrintOnConfirm ? 'bg-[#C9974A]' : 'bg-gray-700'
-                                                }`}
+                                                className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${draft.autoPrintOnConfirm ? 'bg-[#C9974A]' : 'bg-gray-700'
+                                                    }`}
                                             >
                                                 <div
-                                                    className={`w-5 h-5 rounded-full bg-[#1a0a0a] transition-transform ${
-                                                        draft.autoPrintOnConfirm ? 'translate-x-5' : 'translate-x-0'
-                                                    }`}
+                                                    className={`w-5 h-5 rounded-full bg-[#1a0a0a] transition-transform ${draft.autoPrintOnConfirm ? 'translate-x-5' : 'translate-x-0'
+                                                        }`}
                                                 />
                                             </div>
                                         </div>
@@ -1842,6 +1902,163 @@ function SettingsDrawerContent({
                         </div>
                     </motion.div>
                 </div>
+            </div>
+        </AnimatePresence>
+    );
+}
+
+interface MenuStockDrawerProps {
+    isOpen: boolean;
+    onClose: () => void;
+    menuItems: any[];
+    onUpdateStock: (itemId: string, isAvailable: boolean, qty: number | null) => void;
+    togglingId: string | null;
+}
+
+function MenuStockDrawer({ isOpen, onClose, menuItems, onUpdateStock, togglingId }: MenuStockDrawerProps) {
+    const [search, setSearch] = useState('');
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return menuItems;
+        const q = search.toLowerCase();
+        return menuItems.filter(item =>
+            item.name.toLowerCase().includes(q) ||
+            (item.category_id || '').toLowerCase().includes(q)
+        );
+    }, [menuItems, search]);
+
+    if (!isOpen) return null;
+
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-50 flex justify-end font-sans">
+                {/* Backdrop */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+                />
+
+                {/* Content Panel */}
+                <motion.div
+                    initial={{ x: '100%' }}
+                    animate={{ x: 0 }}
+                    exit={{ x: '100%' }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                    className="relative w-full max-w-md bg-[#240e0e] text-[#F6EEDF] border-l border-[#C9974A]/20 flex flex-col h-full shadow-2xl"
+                >
+                    {/* Header */}
+                    <div className="p-5 border-b border-[#C9974A]/20 bg-[#1a0a0a] flex items-center justify-between shrink-0">
+                        <div>
+                            <h3 className="text-sm font-black text-[#C9974A] tracking-wider uppercase">Menu Stock Availability</h3>
+                            <p className="text-[10px] text-gray-400 font-bold mt-0.5">Toggle menu items in-stock or out-of-stock instantly.</p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 rounded-lg bg-[#2a0f0f] border border-[#C9974A]/20 text-[#C9974A] hover:bg-[#3d1616]"
+                        >
+                            <Minimize2 className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="p-4 bg-[#1a0a0a]/50 border-b border-[#C9974A]/10 shrink-0">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search items..."
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                className="w-full bg-[#150707] border border-[#C9974A]/30 rounded-xl pl-9 pr-4 py-2 text-xs font-bold focus:outline-none focus:border-[#C9974A] text-white"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Scrollable list */}
+                    <div className="flex-grow overflow-y-auto p-4 divide-y divide-[#C9974A]/10 space-y-3 taj-scrollbar-dark">
+                        {filtered.map(item => {
+                            const isAvail = item.is_available !== false;
+                            const isVeg = item.is_veg === true;
+                            return (
+                                <div key={item.id} className="flex flex-col gap-2 py-3">
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2 max-w-[70%]">
+                                            <span className={`w-2 h-2 rounded-full shrink-0 ${isVeg ? 'bg-green-500' : 'bg-red-500'}`} />
+                                            <div className="min-w-0">
+                                                <span className="text-xs font-bold block truncate text-white">{item.name}</span>
+                                                <span className="text-[9px] text-[#C9974A] font-bold uppercase">{item.category_id || 'Item'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider
+                                                ${!isAvail
+                                                    ? 'bg-red-950/70 text-red-400 border border-red-500/20'
+                                                    : item.stock_qty !== null
+                                                        ? 'bg-amber-950/70 text-amber-400 border border-amber-500/20'
+                                                        : 'bg-green-950/70 text-green-400 border border-green-500/20'}`}>
+                                                {!isAvail ? 'Out of Stock' : item.stock_qty !== null ? `Limited: ${item.stock_qty}` : 'In Stock'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 justify-end">
+                                        <button
+                                            onClick={() => onUpdateStock(item.id, true, null)}
+                                            disabled={togglingId === item.id}
+                                            className="px-2 py-1 bg-green-900/40 hover:bg-green-900/85 border border-green-500/20 text-green-400 text-[9px] font-bold rounded cursor-pointer"
+                                        >
+                                            In Stock
+                                        </button>
+                                        <button
+                                            onClick={() => onUpdateStock(item.id, false, null)}
+                                            disabled={togglingId === item.id}
+                                            className="px-2 py-1 bg-red-900/40 hover:bg-red-900/85 border border-red-500/20 text-red-400 text-[9px] font-bold rounded cursor-pointer"
+                                        >
+                                            Out of Stock
+                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                placeholder="Qty"
+                                                defaultValue={item.stock_qty !== null ? item.stock_qty : ''}
+                                                onBlur={(e) => {
+                                                    const val = parseInt(e.target.value);
+                                                    if (!isNaN(val) && val >= 0) {
+                                                        onUpdateStock(item.id, true, val);
+                                                    } else if (e.target.value === '') {
+                                                        onUpdateStock(item.id, true, null);
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        const target = e.target as HTMLInputElement;
+                                                        const val = parseInt(target.value);
+                                                        if (!isNaN(val) && val >= 0) {
+                                                            onUpdateStock(item.id, true, val);
+                                                        } else if (target.value === '') {
+                                                            onUpdateStock(item.id, true, null);
+                                                        }
+                                                    }
+                                                }}
+                                                className="w-12 bg-[#150707] border border-[#C9974A]/30 rounded px-1.5 py-0.5 text-[9px] font-bold text-center text-white"
+                                            />
+                                            <span className="text-[9px] text-gray-400 font-bold">Limit</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filtered.length === 0 && (
+                            <div className="text-center py-12 text-gray-400 font-bold text-xs">
+                                No matching menu items.
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
             </div>
         </AnimatePresence>
     );

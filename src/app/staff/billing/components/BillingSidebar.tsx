@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    X, Lock, Layers, LayoutGrid, ClipboardList, History, 
-    BarChart3, ChefHat, User, Users, Activity, TrendingUp, 
-    BookOpen, Settings, FileSpreadsheet, ChevronDown 
+import {
+    X, Lock, Layers, LayoutGrid, ClipboardList, History,
+    BarChart3, ChefHat, User, Users, Activity, TrendingUp,
+    BookOpen, Settings, FileSpreadsheet, ChevronDown
 } from 'lucide-react';
 
 interface Props {
@@ -40,10 +40,12 @@ export function BillingSidebar({
             label: 'POS Operations',
             icon: ClipboardList,
             items: [
-                { id: 'bento', label: 'Bento Dashboard Overview', icon: Layers, perm: 'view_billing' },
+                { id: 'Dashboard', label: 'Dashboard Overview', icon: Layers, perm: 'view_billing' },
                 { id: 'tables', label: 'Dine-In Floor Map Grid', icon: LayoutGrid, perm: 'view_orders' },
                 { id: 'takeaway', label: 'Takeaway Counter Queue', icon: ClipboardList, perm: 'view_orders' },
+                { id: 'online_orders', label: 'Online Delivery Queue (Swiggy/Zomato)', icon: ClipboardList, perm: 'view_orders' },
                 { id: 'Kitchen Tickets', label: 'Kitchen Tickets Queue', icon: ChefHat, perm: 'view_kitchen_queue' },
+                { id: 'stock_inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'view_menu' },
             ]
         },
         {
@@ -54,7 +56,6 @@ export function BillingSidebar({
                 { id: 'Staff Roster', label: 'Staff Roster Management', icon: Users, perm: 'manage_staff' },
                 { id: 'Drawer Session', label: 'Register Drawer Shift', icon: Activity, perm: 'manage_cash_drawer' },
                 { id: 'Petty Expenses', label: 'Petty Cash Expenses', icon: TrendingUp, perm: 'manage_expenses' },
-                { id: 'Stock Inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'manage_inventory' },
             ]
         },
         {
@@ -74,7 +75,7 @@ export function BillingSidebar({
 
     return (
         <div className="fixed inset-0 z-50 flex">
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.4 }}
                 exit={{ opacity: 0 }}
@@ -138,8 +139,8 @@ export function BillingSidebar({
                                                             key={idx}
                                                             onClick={() => handleSidebarAction(item.id, item.perm)}
                                                             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left
-                                                                ${allowed 
-                                                                    ? 'text-[#4E1414] hover:bg-[#F6EEDF]/40 cursor-pointer' 
+                                                                ${allowed
+                                                                    ? 'text-[#4E1414] hover:bg-[#F6EEDF]/40 cursor-pointer'
                                                                     : 'text-gray-400 opacity-60 cursor-pointer'}`}
                                                         >
                                                             <span className="flex items-center gap-2.5">

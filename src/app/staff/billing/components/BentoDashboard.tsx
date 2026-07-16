@@ -97,13 +97,20 @@ export function BentoDashboard({
                 <div className="space-y-2 max-h-[170px] overflow-y-auto pr-1">
                     {menuItemsList.map(item => (
                         <div key={item.id} className="flex justify-between items-center text-xs py-1 border-b border-[#C9974A]/10 last:border-b-0">
-                            <span className="font-semibold truncate max-w-[170px]">{item.name}</span>
+                            <span className="font-semibold truncate max-w-[170px] flex items-center gap-1.5">
+                                {item.name}
+                                {item.stock_qty !== null && (
+                                    <span className="text-[9px] bg-amber-100 text-amber-850 border border-amber-200 px-1.5 py-0.5 rounded font-black">
+                                        Qty: {item.stock_qty}
+                                    </span>
+                                )}
+                            </span>
                             <button
                                 onClick={() => handleToggleItemStock(item.id, item.is_available)}
                                 className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase transition-all
                                     ${item.is_available ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}
                             >
-                                {item.is_available ? 'In Stock' : 'No Stock'}
+                                {item.is_available ? (item.stock_qty !== null ? 'Limited' : 'In Stock') : 'No Stock'}
                             </button>
                         </div>
                     ))}
