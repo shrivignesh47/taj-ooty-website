@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -16,7 +16,6 @@ export function AdminActivityLog() {
     const [error, setError] = useState<string | null>(null);
 
     const loadLog = () => {
-        setLoading(true);
         fetchActivityLog().then(res => {
             if (res.success) setLog(res.data);
             else setError(res.error ?? 'Failed to load activity log');

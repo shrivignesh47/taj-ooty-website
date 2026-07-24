@@ -29,6 +29,8 @@ interface CartStore {
     clearCart: () => void;
     isOnboarded: boolean;
     setOnboarded: (status: boolean) => void;
+    idempotencyKey: string;
+    regenerateIdempotencyKey: () => void;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -37,6 +39,7 @@ export const useCartStore = create<CartStore>()(
             customer: null,
             items: [],
             isOnboarded: false,
+            idempotencyKey: crypto.randomUUID(),
 
             setOnboarded: (status) => set({ isOnboarded: status }),
             setCustomer: (session) => set({ customer: session }),
@@ -79,7 +82,8 @@ export const useCartStore = create<CartStore>()(
                 };
             }),
 
-            clearCart: () => set({ items: [] }),
+            clearCart: () => set({ items: [], idempotencyKey: crypto.randomUUID() }),
+            regenerateIdempotencyKey: () => set({ idempotencyKey: crypto.randomUUID() }),
         }),
         {
             name: 'taj-ooty-ordering-storage',

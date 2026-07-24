@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 import { LayoutGrid, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';

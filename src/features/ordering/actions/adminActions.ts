@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
@@ -121,7 +121,7 @@ export async function deleteMenuItem(id: string) {
 
 
 export async function addMenuItem(name: string, price: number, category: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let cat: any = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
     if (!cat) {
         const { data: maxSort } = await admin.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();

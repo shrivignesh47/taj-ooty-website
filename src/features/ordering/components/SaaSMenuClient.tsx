@@ -399,6 +399,7 @@ function CartDrawerManager({ setActiveOrder, customer }: { setActiveOrder: (id: 
     const items = useCartStore((state) => state.items);
     const updateQty = useCartStore((state) => state.updateQty);
     const clearCart = useCartStore((state) => state.clearCart);
+    const idempotencyKey = useCartStore((state) => state.idempotencyKey);
     
     const [isOpen, setIsOpen] = useState(false);
     const [notes, setNotes] = useState('');
@@ -422,7 +423,7 @@ function CartDrawerManager({ setActiveOrder, customer }: { setActiveOrder: (id: 
         
         try {
             const { submitCustomerOrder } = await import('../actions/submitOrder');
-            const res = await submitCustomerOrder(customer, submittedItems);
+            const res = await submitCustomerOrder(customer, submittedItems, idempotencyKey);
 
             if (res.success && res.orderId) {
                 setActiveOrder(res.orderId);

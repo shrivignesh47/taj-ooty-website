@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
@@ -200,7 +200,6 @@ export function AdminDash() {
             clearInterval(interval);
             supabase.removeChannel(channel);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fetchData]);
 
     // Menu handlers

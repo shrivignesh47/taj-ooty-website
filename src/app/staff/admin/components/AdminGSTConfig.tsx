@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Settings, Save, AlertCircle, CheckCircle2, FileSpreadsheet, Plus, Trash } from 'lucide-react';
+import { Settings, Save, AlertCircle, CheckCircle2, FileSpreadsheet, Trash } from 'lucide-react';
 import { supabase } from '@/features/ordering/lib/supabase';
 import * as XLSX from 'xlsx';
 

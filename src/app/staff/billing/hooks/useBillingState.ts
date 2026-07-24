@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/features/ordering/lib/supabase';
-import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
 import { orderTotal } from '../components/utils';
+import {
+    settleBillWithPayment, openRegisterSession, closeRegisterSession,
+    getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown
+} from '@/features/ordering/actions/billingActions';
 import {
     TableView, CashierOrder, GuestRecord, StaffUser, AttendanceLog,
     MainView, PayMethod, DayStats, PettyCashEntry
@@ -53,14 +56,15 @@ export function useBillingState(activeUser: any) {
         cashSales: 0, cardSales: 0, upiSales: 0
     });
 
-    // Cash Register Session
-    const [isRegisterOpen, setIsRegisterOpen] = useState(true);
-    const [openingFloat, setOpeningFloat] = useState(2500);
-    const [expectedCash, setExpectedCash] = useState(2500);
+    // Cash Register Session — persisted to DB
+    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+    const [registerSessionId, setRegisterSessionId] = useState<string | null>(null);
+    const [openingFloat, setOpeningFloat] = useState(0);
+    const [expectedCash, setExpectedCash] = useState(0);
     const [actualClosingCash, setActualClosingCash] = useState(0);
     const [registerLogs, setRegisterLogs] = useState<any[]>([]);
 
-    // Petty Cash Expenses
+    // Petty Cash Expenses — persisted to DB
     const [expenses, setExpenses] = useState<PettyCashEntry[]>([]);
     const [newExpensePurpose, setNewExpensePurpose] = useState('');
     const [newExpenseAmount, setNewExpenseAmount] = useState<number>(0);
@@ -269,26 +273,17 @@ export function useBillingState(activeUser: any) {
             }
         }, 0);
 
-        let cash = 0, card = 0, upi = 0;
-        todayBills.forEach((o, idx) => {
-            const total = orderTotal(o) * 1.15;
-            if (idx % 3 === 0) cash += total;
-            else if (idx % 3 === 1) upi += total;
-            else card += total;
-        });
-
         setTables(enriched);
         setActiveOrders(rawOrders);
         setHistory(rawHistory);
-        setDayStats({
+        setDayStats(prev => ({
             revenue: rev, bills: todayBills.length,
             avgBill: todayBills.length ? rev / todayBills.length : 0,
             activeTables: enriched.filter(t => t.status !== 'Empty').length,
-            cashSales: cash, cardSales: card, upiSales: upi
-        });
+            // Keep payment split from last loadShiftData — don't re-query on every realtime event
+            cashSales: prev.cashSales, cardSales: prev.cardSales, upiSales: prev.upiSales
+        }));
 
-        const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
-        setExpectedCash(openingFloat + cash - expenseTotal);
 
         if (selectedTable) {
             if (selectedTable.table_no === 0) {
@@ -322,15 +317,62 @@ export function useBillingState(activeUser: any) {
         setRefreshing(false);
     }, [selectedTable, openingFloat, expenses, settings.gstRate, settings.isGstInclusive, settings.chargeServiceTax, settings.serviceChargeRate, attendanceStaffId, activeUser.id]);
 
+    // ─── Shift-level data: payment breakdown + register session ──────────────
+    // Called ONCE on mount and after bill settlement / register open/close.
+    // NOT called on every realtime order event (avoids server action spam).
+    const loadShiftData = useCallback(async () => {
+        const [payBreakdown, { session }] = await Promise.all([
+            getTodayPaymentBreakdown(),
+            getActiveRegisterSession()
+        ]);
+
+        setDayStats(prev => ({
+            ...prev,
+            cashSales: payBreakdown.cash,
+            cardSales: payBreakdown.card,
+            upiSales: payBreakdown.upi
+        }));
+
+        if (session) {
+            setIsRegisterOpen(true);
+            setRegisterSessionId(session.id);
+            setOpeningFloat(session.opening_float ?? 0);
+            const { expenses: dbExpenses } = await getSessionExpenses(session.id);
+            const mapped: PettyCashEntry[] = (dbExpenses as any[]).map((e: any) => ({
+                id: e.id,
+                purpose: e.description,
+                amount: e.amount,
+                created_at: e.created_at
+            }));
+            setExpenses(mapped);
+            const expenseTotal = mapped.reduce((s, e) => s + e.amount, 0);
+            setExpectedCash((session.opening_float ?? 0) + payBreakdown.cash - expenseTotal);
+        } else {
+            setIsRegisterOpen(false);
+            setRegisterSessionId(null);
+            setExpenses([]);
+            setExpectedCash(payBreakdown.cash);
+        }
+    }, []);
+
+    const loadDataRef = useRef(loadData);
     useEffect(() => {
-        loadData();
+        loadDataRef.current = loadData;
+    }, [loadData]);
+
+    useEffect(() => {
+        // Initial load: both orders data AND shift-level data
+        loadDataRef.current();
+        loadShiftData();
+
+        // Realtime: only refresh orders/tables/menu — NOT payment or register session
         const ch = supabase.channel('cashier-petpooja-v4-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadData)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, loadData)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadDataRef.current())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadDataRef.current())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadDataRef.current())
             .subscribe();
         return () => { supabase.removeChannel(ch); };
-    }, [loadData]);
+    }, [loadShiftData]);
 
     const handleSelectTable = (t: TableView) => {
         if (t.status === 'Empty') return;
@@ -361,19 +403,21 @@ export function useBillingState(activeUser: any) {
         
         let cgst = 0, sgst = 0, service = 0, grand = 0;
         const splitRate = settings.gstRate / 2;
+        const serviceChargeRate = settings.chargeServiceTax 
+            ? (settings.serviceChargeRate ?? 0) / 100 
+            : 0;
+        service = subtotal * serviceChargeRate;
 
         if (settings.isGstInclusive) {
             const baseAmount = taxableAmount / (1 + (settings.gstRate / 100));
             const totalGst = taxableAmount - baseAmount;
             cgst = totalGst / 2;
             sgst = totalGst / 2;
-            service = 0;
-            grand = taxableAmount;
+            grand = taxableAmount + service;
         } else {
             cgst = taxableAmount * (splitRate / 100);
             sgst = taxableAmount * (splitRate / 100);
-            service = 0;
-            grand = taxableAmount + cgst + sgst;
+            grand = taxableAmount + cgst + sgst + service;
         }
 
         return { allItems, subtotal, discountAmt, taxableAmount, cgst, sgst, service, grand };
@@ -443,11 +487,18 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
             if (settings.autoPrint) {
                 handlePrintBill(t);
             }
-            for (const o of t.orders) {
-                await advanceOrderStatus(o.id, 'billed');
+            const calc = getCheckoutCalculation(t);
+            const orderIds = t.orders.map(o => o.id);
+            // FIX 1: Use real bill insert with actual payment_method
+            const result = await settleBillWithPayment(orderIds, calc.grand, paymentMethod);
+            if (!result.success) {
+                alert(`Settlement failed: ${result.error}`);
+                return;
             }
             setSelectedTable(null);
+            // loadData refreshes table states; loadShiftData refreshes payment breakdown
             loadData();
+            loadShiftData();
         } catch (e) {
             console.error('Failed to settle payment', e);
         } finally {
@@ -535,30 +586,63 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         }
     };
 
-    const handleAddExpense = (e: React.FormEvent) => {
+    // FIX 2: Open register session — persisted to DB
+    const handleOpenSession = async (float: number) => {
+        const result = await openRegisterSession(float);
+        if (result.success && result.session) {
+            setIsRegisterOpen(true);
+            setRegisterSessionId(result.session.id);
+            setOpeningFloat(float);
+            setExpenses([]);
+            // Refresh shift data so expected cash is recalculated
+            loadShiftData();
+        } else {
+            alert(`Failed to open register: ${result.error}`);
+        }
+    };
+
+    // FIX 2: Add petty expense — persisted to DB
+    const handleAddExpense = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newExpensePurpose || newExpenseAmount <= 0) return;
-        const entry: PettyCashEntry = {
-            id: Math.random().toString(36).substring(2, 9),
-            purpose: newExpensePurpose,
-            amount: newExpenseAmount,
-            created_at: new Date().toISOString()
-        };
-        setExpenses(prev => [entry, ...prev]);
+        if (!registerSessionId) {
+            alert('Please open the register session first.');
+            return;
+        }
+        const result = await addPettyExpense(registerSessionId, newExpensePurpose, newExpenseAmount);
+        if (result.success && result.expense) {
+            const entry: PettyCashEntry = {
+                id: result.expense.id,
+                purpose: result.expense.description,
+                amount: result.expense.amount,
+                created_at: result.expense.created_at
+            };
+            setExpenses(prev => [entry, ...prev]);
+        } else {
+            alert(`Failed to save expense: ${result.error}`);
+        }
         setNewExpensePurpose('');
         setNewExpenseAmount(0);
         setActiveOpModal(null);
     };
 
-    const handleCloseSession = () => {
-        const closingLog = {
-            closed_at: new Date().toLocaleTimeString(),
-            expected: expectedCash,
-            actual: actualClosingCash,
-            variance: actualClosingCash - expectedCash
-        };
-        setRegisterLogs(prev => [closingLog, ...prev]);
-        setIsRegisterOpen(false);
+    // FIX 2: Close session — persisted to DB
+    const handleCloseSession = async () => {
+        if (!registerSessionId) return;
+        const result = await closeRegisterSession(registerSessionId, actualClosingCash);
+        if (result.success) {
+            const closingLog = {
+                closed_at: new Date().toLocaleTimeString(),
+                expected: expectedCash,
+                actual: actualClosingCash,
+                variance: actualClosingCash - expectedCash
+            };
+            setRegisterLogs(prev => [closingLog, ...prev]);
+            setIsRegisterOpen(false);
+            setRegisterSessionId(null);
+        } else {
+            alert(`Failed to close register: ${result.error}`);
+        }
         setActiveOpModal(null);
     };
 
@@ -594,15 +678,15 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         discountValue, setDiscountValue, appliedCoupon, setAppliedCoupon,
         paymentMethod, setPaymentMethod, submittingPayment, billPrinted, setBillPrinted,
         isSplitEnabled, setIsSplitEnabled, splitGuests, setSplitGuests,
-        dayStats, isRegisterOpen, setIsRegisterOpen, openingFloat, setOpeningFloat,
+        dayStats, isRegisterOpen, setIsRegisterOpen, openingFloat, setOpeningFloat, registerSessionId,
         expectedCash, actualClosingCash, setActualClosingCash, registerLogs,
         expenses, newExpensePurpose, setNewExpensePurpose, newExpenseAmount, setNewExpenseAmount,
         takeawayOrders, onlineOrders, restaurantSettings, toggleAggregator, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
         settings, setSettings, activeOpModal, setActiveOpModal, deniedPermission, setDeniedPermission,
         selectedReport, setSelectedReport, attendanceStaffId, setAttendanceStaffId, rolesList,
-        hasPerm, canApplyDiscount, canSettleBills, loadData, handleSelectTable,
+        hasPerm, canApplyDiscount, canSettleBills, loadData, loadShiftData, handleSelectTable,
         getCheckoutCalculation, handleApplyCoupon, handlePrintBill, handleSettlePayment,
         handleToggleItemStock, handleStaffAttendance, handleUpdateMenuStock, triggerPermissionDenied,
-        handleSidebarAction, handleAddExpense, handleCloseSession
+        handleSidebarAction, handleAddExpense, handleCloseSession, handleOpenSession
     };
 }

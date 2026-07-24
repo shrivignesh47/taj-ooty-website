@@ -1,44 +1,89 @@
 "use server";
 
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { supabase } from '../lib/supabase';
 import { CustomerSession, CartItem } from '../store/useCartStore';
 import { revalidatePath } from 'next/cache';
 
-export async function submitCustomerOrder(customer: CustomerSession, cart: CartItem[]) {
-    if (!customer.name || !customer.phone || customer.table_no <= 0) {
-        throw new Error('Invalid customer session details');
+export async function submitCustomerOrder(customer: CustomerSession, cart: CartItem[], idempotencyKey: string) {
+    // 1. Strict Validation
+    if (!idempotencyKey) return { success: false, error: 'Missing session key' };
+    if (!customer.name || customer.name.length < 2 || customer.name.length > 50) {
+        return { success: false, error: 'Name must be between 2 and 50 characters' };
+    }
+    
+    if (!customer.phone || !/^\d{10}$/.test(customer.phone)) {
+        return { success: false, error: 'Phone number must be exactly 10 digits' };
+    }
+
+    if (!customer.table_no || customer.table_no <= 0) {
+        return { success: false, error: 'Invalid table number' };
     }
 
     if (!cart || cart.length === 0) {
-        throw new Error('Cart is completely empty');
+        return { success: false, error: 'Cart is completely empty' };
+    }
+
+    for (const item of cart) {
+        if (!item.menu_item_id) return { success: false, error: 'Invalid item in cart' };
+        if (item.qty <= 0 || !Number.isInteger(item.qty)) return { success: false, error: 'Invalid quantity' };
+        if (item.qty > 50) return { success: false, error: 'Quantity for item exceeds maximum limit of 50' };
     }
 
     try {
-        // 1. Fetch table UUID by mapping table_no
+        // 1.5 Idempotency Check
+        const { data: existingOrder } = await supabaseAdmin
+            .from('orders')
+            .select('id, status')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+
+        if (existingOrder) {
+            return { success: true, orderId: existingOrder.id, alreadySubmitted: true };
+        }
+
+        // 2. Validate Table (must exist)
         const { data: tables } = await supabaseAdmin
             .from('restaurant_tables')
             .select('id')
             .eq('table_no', customer.table_no);
 
-        let tableId: string;
-
         if (!tables || tables.length === 0) {
-            const { data: newTable, error: tableErr } = await supabaseAdmin
-                .from('restaurant_tables')
-                .insert([{ table_no: customer.table_no }])
-                .select()
-                .single();
+            return { success: false, error: 'Invalid table. Please scan the QR code again or ask staff for help.' };
+        }
+        
+        const tableId = tables[0].id;
 
-            if (tableErr) throw new Error(`Table registration failed: ${tableErr.message}`);
-            tableId = newTable.id;
-        } else {
-            tableId = tables[0].id;
+        // 3. Rate limiting (max 5 orders in 10 mins)
+        const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { count: recentOrdersCount } = await supabaseAdmin
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('customer_phone', customer.phone)
+            .gte('created_at', tenMinsAgo);
+
+        if (recentOrdersCount !== null && recentOrdersCount >= 5) {
+            return { success: false, error: "You've placed several orders recently. Please wait a few minutes or contact your waiter." };
         }
 
-        // 2. Check if there is already an unconfirmed ('pending') order on this table.
-        // If previous orders on this table are already 'confirmed', 'preparing', 'ready', or 'served',
-        // we create a brand new 'pending' order (KOT ticket) so the waiter gets alerted in Incoming Orders,
-        // can review/edit the new items, and send a separate clean KOT to the kitchen!
+        // 4. Validate menu items (must exist & be available)
+        const itemIds = cart.map(i => i.menu_item_id);
+        const { data: menuItems } = await supabaseAdmin
+            .from('menu_items')
+            .select('id, is_available')
+            .in('id', itemIds);
+
+        if (!menuItems || menuItems.length !== itemIds.length) {
+            return { success: false, error: 'One or more items in your cart are invalid or no longer exist.' };
+        }
+
+        for (const dbItem of menuItems) {
+            if (!dbItem.is_available) {
+                return { success: false, error: 'One or more items in your cart are currently out of stock.' };
+            }
+        }
+
+        // 5. Check if there is already an unconfirmed ('pending') order on this table.
         const { data: activeOrders } = await supabaseAdmin
             .from('orders')
             .select('id, status')
@@ -48,13 +93,10 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
 
         let orderId: string;
 
-        if (activeOrders && activeOrders.length > 0) {
-            // Append items to existing active order!
-            const activeOrder = activeOrders[0];
-            orderId = activeOrder.id;
-
+        // Helper: build payload and insert order items using ANON client
+        const insertOrderItems = async (targetOrderId: string) => {
             const orderItemsPayload = cart.map(item => ({
-                order_id: orderId,
+                order_id: targetOrderId,
                 menu_item_id: item.menu_item_id,
                 qty: item.qty,
                 notes: item.notes || null,
@@ -62,61 +104,72 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
                 status: 'pending'
             }));
 
-            const { error: itemsErr } = await supabaseAdmin
+            const { error: itemsErr } = await supabase
                 .from('order_items')
                 .insert(orderItemsPayload);
 
-            if (itemsErr) throw new Error(`Order Items mapping failed: ${itemsErr.message}`);
-
-            // If existing order was served or ready, transition back to preparing so kitchen knows immediately!
-            if (['served', 'ready'].includes(activeOrder.status)) {
-                await supabaseAdmin.from('orders').update({ status: 'preparing' }).eq('id', orderId);
-                await supabaseAdmin.from('order_status_history').insert([{
-                    order_id: orderId,
-                    status: 'preparing',
-                    changed_by: null
-                }]);
-            } else {
-                await supabaseAdmin.from('orders').update({ updated_at: new Date().toISOString() }).eq('id', orderId);
+            if (itemsErr) {
+                if (itemsErr.message?.includes('STOCK_EXHAUSTED:')) {
+                    const userMsg = itemsErr.message
+                        .split('STOCK_EXHAUSTED:')[1]
+                        ?.split('\n')[0]
+                        ?.trim()
+                        ?? 'Sorry, one or more items just sold out. Please remove them and try again.';
+                    throw new Error(userMsg);
+                }
+                throw new Error(`Order Items mapping failed: ${itemsErr.message}`);
             }
+        };
+
+        if (activeOrders && activeOrders.length > 0) {
+            // Append items to existing pending order
+            const activeOrder = activeOrders[0];
+            orderId = activeOrder.id;
+
+            await insertOrderItems(orderId);
+            
+            await supabaseAdmin.from('orders').update({ updated_at: new Date().toISOString() }).eq('id', orderId);
         } else {
-            // Create brand new order
-            const { data: order, error: orderErr } = await supabaseAdmin
+            // Create brand new order using ANON client (relies on RLS)
+            const { data: order, error: orderErr } = await supabase
                 .from('orders')
                 .insert([{
                     table_id: tableId,
                     customer_name: customer.name,
                     customer_phone: customer.phone,
-                    status: 'pending'
+                    status: 'pending',
+                    idempotency_key: idempotencyKey
                 }])
                 .select()
                 .single();
 
-            if (orderErr) throw new Error(`Order insertion failed: ${orderErr.message}`);
+            if (orderErr) {
+                // Check if race condition triggered unique constraint on idempotency_key (23505)
+                if (orderErr.code === '23505') {
+                    const { data: duplicate } = await supabaseAdmin
+                        .from('orders')
+                        .select('id')
+                        .eq('idempotency_key', idempotencyKey)
+                        .maybeSingle();
+                    if (duplicate) return { success: true, orderId: duplicate.id, alreadySubmitted: true };
+                }
+                throw new Error(`Order insertion failed: ${orderErr.message}`);
+            }
             orderId = order.id;
 
-            const orderItemsPayload = cart.map(item => ({
-                order_id: orderId,
-                menu_item_id: item.menu_item_id,
-                qty: item.qty,
-                notes: item.notes || null,
-                price_at_order: item.price,
-                status: 'pending'
-            }));
+            await insertOrderItems(orderId);
 
-            const { error: itemsErr } = await supabaseAdmin
-                .from('order_items')
-                .insert(orderItemsPayload);
-
-            if (itemsErr) throw new Error(`Order Items mapping failed: ${itemsErr.message}`);
-
-            await supabaseAdmin
+            const { error: historyErr } = await supabase
                 .from('order_status_history')
                 .insert([{
                     order_id: orderId,
                     status: 'pending',
                     changed_by: null
                 }]);
+            
+            if (historyErr) {
+                console.error("Order history insert failed:", historyErr);
+            }
         }
 
         revalidatePath('/staff/kitchen');
@@ -128,7 +181,6 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
 
     } catch (error) {
         const errObj = error as Error;
-        console.error("Order submission failure:", errObj.message);
         return { success: false, error: errObj.message };
     }
 }

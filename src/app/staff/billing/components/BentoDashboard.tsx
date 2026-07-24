@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { 
     LayoutGrid, BookOpen, ChefHat, CalendarRange, User, Activity, Flame 
@@ -25,6 +26,7 @@ interface Props {
     isRegisterOpen: boolean;
     handleSidebarAction: (actionId: string, permKey: string) => void;
     history: any[];
+    handleOpenSession: (float: number) => Promise<void>;
 }
 
 export function BentoDashboard({
@@ -45,8 +47,10 @@ export function BentoDashboard({
     dayStats,
     isRegisterOpen,
     handleSidebarAction,
-    history
+    history,
+    handleOpenSession
 }: Props) {
+    const [newFloat, setNewFloat] = useState(2500);
     // Find the trending item dynamically from the shift history
     const itemCounts: Record<string, { qty: number; name: string; isVeg: boolean }> = {};
     const aggregateOrders = [...(activeOrders || []), ...(history || [])];
@@ -257,29 +261,53 @@ export function BentoDashboard({
                     <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
                         <Activity className="w-4 h-4 text-[#C9974A]" /> Cash Drawer Register Session
                     </h3>
-                    <span className="text-[10px] font-bold text-gray-400">STATUS: {isRegisterOpen ? 'OPEN' : 'CLOSED'}</span>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                        isRegisterOpen ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'
+                    }`}>STATUS: {isRegisterOpen ? '✓ OPEN' : '✗ CLOSED'}</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                    <div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Float</span>
-                        <p className="text-sm font-black mt-0.5">{fmt(openingFloat)}</p>
+                {isRegisterOpen ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                        <div>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase">Opening Float</span>
+                            <p className="text-sm font-black mt-0.5">{fmt(openingFloat)}</p>
+                        </div>
+                        <div>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase">Cash Sales</span>
+                            <p className="text-sm font-black mt-0.5 text-green-700">{fmt(dayStats.cashSales)}</p>
+                        </div>
+                        <div>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase">Expected Drawer</span>
+                            <p className="text-sm font-black mt-0.5 text-green-700">{fmt(expectedCash)}</p>
+                        </div>
+                        <button
+                            onClick={() => handleSidebarAction('Drawer Session', 'manage_cash_drawer')}
+                            className="bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold px-3 py-1.5 rounded-lg text-[10px] transition-colors"
+                        >
+                            Drawer Balancing Settings
+                        </button>
                     </div>
-                    <div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Cash Sales</span>
-                        <p className="text-sm font-black mt-0.5 text-green-700">{fmt(dayStats.cashSales)}</p>
+                ) : (
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 flex-1">
+                            <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Opening Float (₹):</label>
+                            <input
+                                type="number"
+                                value={newFloat}
+                                onChange={e => setNewFloat(Number(e.target.value))}
+                                min={0}
+                                className="flex-1 border border-[#C9974A]/40 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#C9974A]/40"
+                            />
+                        </div>
+                        <button
+                            onClick={() => handleOpenSession(newFloat)}
+                            className="bg-green-700 hover:bg-green-800 text-white font-bold px-4 py-2 rounded-lg text-xs transition-colors whitespace-nowrap"
+                        >
+                            ✓ Open Register Session
+                        </button>
+                        <p className="text-[10px] text-gray-400 italic">Register is closed — open it to track cash drawer balance.</p>
                     </div>
-                    <div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Expected Drawer</span>
-                        <p className="text-sm font-black mt-0.5 text-green-700">{fmt(expectedCash)}</p>
-                    </div>
-                    <button
-                        onClick={() => handleSidebarAction('Drawer Session', 'manage_cash_drawer')}
-                        className="bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold px-3 py-1.5 rounded-lg text-[10px] transition-colors"
-                    >
-                        Drawer Balancing Settings
-                    </button>
-                </div>
+                )}
             </div>
 
         </div>

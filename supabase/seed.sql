@@ -214,8 +214,11 @@ INSERT INTO restaurant_tables (table_no)
 SELECT generate_series FROM generate_series(1, 25)
 ON CONFLICT (table_no) DO NOTHING;
 
+-- NOTE: qr_code_url stores a relative path only.
+-- The full URL is constructed at runtime using NEXT_PUBLIC_SITE_URL in AdminTablesLive.tsx
+-- This avoids hardcoding localhost and works correctly in all environments.
 UPDATE restaurant_tables
-SET qr_code_url = 'http://localhost:3000/MenuCard?table=' || id::text;
+SET qr_code_url = '/MenuCard?table=' || id::text;
 
 -- Seed categories and menu items
 DO $$

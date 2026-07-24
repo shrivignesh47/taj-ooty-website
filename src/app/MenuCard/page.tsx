@@ -18,7 +18,7 @@ export default async function MenuCardPage({ searchParams }: { searchParams: Pro
                 .eq('id', resolvedParams.table)
                 .single();
             if (data) initialTableNo = data.table_no;
-        } catch (e) {
+        } catch (_e) {
             console.error("Invalid table ID");
         }
     }

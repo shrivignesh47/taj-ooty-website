@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/features/ordering/lib/supabaseAdmin';
 
@@ -31,7 +31,7 @@ export async function GET() {
 
         // 2. Fetch or Create Admin Role
         let roleId = '';
-        const { data: roles, error: rolesErr } = await supabaseAdmin
+        const { data: roles, error: _rolesErr } = await supabaseAdmin
             .from('roles')
             .select('id')
             .eq('name', 'admin')

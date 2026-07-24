@@ -91,6 +91,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             isRegisterOpen={s.isRegisterOpen}
                             handleSidebarAction={s.handleSidebarAction}
                             history={s.history}
+                            handleOpenSession={s.handleOpenSession}
                         />
                     )}
                     {s.view === 'tables' && (
