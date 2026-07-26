@@ -7,11 +7,13 @@ import { CashierOrder } from '../types';
 interface Props {
     history: CashierOrder[];
     setView: (view: 'bento' | 'tables' | 'takeaway' | 'history' | 'reports') => void;
+    gstRate?: number; // e.g. 0.05 for 5% — passed from restaurant_settings, defaults to 0
 }
 
 export function BillingHistory({
     history,
-    setView
+    setView,
+    gstRate = 0
 }: Props) {
     return (
         <div className="bg-white border border-[#C9974A]/30 p-5 rounded-2xl shadow-sm space-y-4">
@@ -40,7 +42,7 @@ export function BillingHistory({
                     <tbody className="divide-y divide-[#C9974A]/20 bg-white">
                         {history.map(o => {
                             const sub = orderTotal(o);
-                            const grand = sub * 1.15;
+                            const grand = sub * (1 + gstRate);
                             return (
                                 <tr key={o.id} className="hover:bg-[#F6EEDF]/30 transition-colors">
                                     <td className="p-3 font-bold text-[#4E1414]">{o.restaurant_tables ? `Table ${o.restaurant_tables.table_no}` : 'Counter'}</td>

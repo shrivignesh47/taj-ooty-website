@@ -7,9 +7,11 @@ import { CashierOrder } from '../types';
 import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
 import { simulateOnlineOrder, fetchRestaurantSettings } from '@/features/ordering/actions/adminActions';
 
+type ViewName = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders';
+
 interface Props {
     onlineOrders: CashierOrder[];
-    setView: (view: any) => void;
+    setView: (view: ViewName) => void;
     loadData: () => Promise<void>;
 }
 
@@ -119,7 +121,7 @@ export function BillingOnlineOrders({
 
             {/* Main Orders Display Queue */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
+
                 {/* Swiggy Lane */}
                 <div className="bg-white border border-[#FC8019]/20 rounded-2xl p-5 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-[#FC8019]/10 pb-3">
@@ -137,7 +139,7 @@ export function BillingOnlineOrders({
 
                     <div className="space-y-4 max-h-[500px] overflow-y-auto taj-scrollbar-dark pr-1">
                         {swiggyOrders.map(order => (
-                            <OrderCard 
+                            <OrderCard
                                 key={order.id}
                                 order={order}
                                 actionLoading={actionLoading}
@@ -170,7 +172,7 @@ export function BillingOnlineOrders({
 
                     <div className="space-y-4 max-h-[500px] overflow-y-auto taj-scrollbar-dark pr-1">
                         {zomatoOrders.map(order => (
-                            <OrderCard 
+                            <OrderCard
                                 key={order.id}
                                 order={order}
                                 actionLoading={actionLoading}

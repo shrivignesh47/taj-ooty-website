@@ -7,6 +7,8 @@ import {
     settleBillWithPayment, openRegisterSession, closeRegisterSession,
     getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown
 } from '@/features/ordering/actions/billingActions';
+import { getDashboardPreferences } from '@/features/ordering/actions/dashboardPrefActions';
+import { normalizeStaffRole } from '@/features/ordering/config/widgetCatalog';
 import {
     TableView, CashierOrder, GuestRecord, StaffUser, AttendanceLog,
     MainView, PayMethod, DayStats, PettyCashEntry
@@ -100,6 +102,11 @@ export function useBillingState(activeUser: any) {
 
     // Staff Roster Management State
     const [rolesList, setRolesList] = useState<any[]>([]);
+
+    // Customizable Dashboard State
+    const [userVisibleWidgets, setUserVisibleWidgets] = useState<string[]>([]);
+    const [userWidgetOrder, setUserWidgetOrder] = useState<string[]>([]);
+    const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
 
     const hasPerm = (requiredPerm: string) => {
         if (currentRoleName?.toLowerCase() === 'admin') return true;
@@ -373,6 +380,19 @@ export function useBillingState(activeUser: any) {
         return () => { supabase.removeChannel(ch); };
     }, [loadShiftData]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const role = normalizeStaffRole(currentRoleName);
+
+        getDashboardPreferences(role).then(res => {
+            if (cancelled || !res.success) return;
+            setUserVisibleWidgets(res.preferences.visible);
+            setUserWidgetOrder(res.preferences.order);
+        });
+
+        return () => { cancelled = true; };
+    }, [currentRoleName]);
+
     const handleSelectTable = (t: TableView) => {
         if (t.status === 'Empty') return;
         setSelectedTable(t);
@@ -403,16 +423,16 @@ export function useBillingState(activeUser: any) {
         });
 
         const subtotal = allItems.reduce((s, i) => s + i.effectivePrice * i.qty, 0);
-        const discountAmt = discountType === 'amt' 
+        const discountAmt = discountType === 'amt'
             ? Math.min(discountValue, subtotal)
             : Math.min((subtotal * discountValue) / 100, subtotal);
-            
+
         const taxableAmount = subtotal - discountAmt;
-        
+
         let cgst = 0, sgst = 0, service = 0, grand = 0;
         const splitRate = settings.gstRate / 2;
-        const serviceChargeRate = settings.chargeServiceTax 
-            ? (settings.serviceChargeRate ?? 0) / 100 
+        const serviceChargeRate = settings.chargeServiceTax
+            ? (settings.serviceChargeRate ?? 0) / 100
             : 0;
         service = subtotal * serviceChargeRate;
 
@@ -471,16 +491,16 @@ export function useBillingState(activeUser: any) {
 <div class="row bold"><span>Item</span><span>Qty × Rate</span><span>Amt</span></div>
 <div class="sep"></div>
 ${calc.allItems.map(i => {
-    const hasDisc = i.discount_percent && Number(i.discount_percent) > 0;
-    const origTotal = i.qty * i.price;
-    const finalTotal = i.qty * i.effectivePrice;
-    return `
+            const hasDisc = i.discount_percent && Number(i.discount_percent) > 0;
+            const origTotal = i.qty * i.price;
+            const finalTotal = i.qty * i.effectivePrice;
+            return `
     <div class="row">
       <span>${i.name}${hasDisc ? ` <br/><span class="disc-tag">(${i.discount_percent}% off - ${i.discount_reason || 'Comp'})</span>` : ''}</span>
       <span>${i.qty}×${i.price}</span>
       <span>${hasDisc ? `₹${origTotal.toFixed(0)} → ₹${finalTotal.toFixed(0)}` : `₹${origTotal.toFixed(0)}`}</span>
     </div>`;
-}).join('')}
+        }).join('')}
 <div class="sep"></div>
 <div class="row"><span>Subtotal</span><span>₹${calc.subtotal.toFixed(0)}</span></div>
 ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(0)}</span></div>` : ''}
@@ -578,7 +598,7 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
                 clock_out: new Date().toISOString(),
                 status: 'completed'
             }).eq('id', activeLog.id);
-            
+
             if (error) {
                 alert('Clock-out failed: ' + error.message);
             } else {
@@ -675,7 +695,7 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         if (!restaurantSettings) return;
         const key = `${aggregator}_enabled`;
         const updatedVal = !restaurantSettings[key];
-        
+
         // Optimistic local state update
         const updated = {
             ...restaurantSettings,
@@ -700,7 +720,7 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         view, setView, tables, setTables, activeOrders, history, menuItemsList,
         guests, staffList, attendanceLogs, loading, refreshing, setRefreshing,
         selectedTable, setSelectedTable, discountType, setDiscountType,
-        discountValue, setDiscountValue, appliedCoupon, setAppliedCoupon,
+        discountValue, setDiscountValue, appliedCoupon, setAppliedCoupon, currentRoleName,
         paymentMethod, setPaymentMethod, submittingPayment, billPrinted, setBillPrinted,
         isSplitEnabled, setIsSplitEnabled, splitGuests, setSplitGuests,
         dayStats, isRegisterOpen, setIsRegisterOpen, openingFloat, setOpeningFloat, registerSessionId,
@@ -709,6 +729,7 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         takeawayOrders, onlineOrders, restaurantSettings, toggleAggregator, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
         settings, setSettings, activeOpModal, setActiveOpModal, deniedPermission, setDeniedPermission,
         selectedReport, setSelectedReport, attendanceStaffId, setAttendanceStaffId, rolesList,
+        userVisibleWidgets, setUserVisibleWidgets, userWidgetOrder, setUserWidgetOrder, isCustomizeOpen, setIsCustomizeOpen,
         hasPerm, canApplyDiscount, canSettleBills, loadData, loadShiftData, handleSelectTable,
         getCheckoutCalculation, handleApplyCoupon, handlePrintBill, handleSettlePayment,
         handleToggleItemStock, handleStaffAttendance, handleUpdateMenuStock, triggerPermissionDenied,

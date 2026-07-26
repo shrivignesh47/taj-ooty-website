@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, IndianRupee, RefreshCw, LogOut, LayoutGrid } from 'lucide-react';
+import { Menu, IndianRupee, RefreshCw, LogOut, LayoutGrid, SlidersHorizontal } from 'lucide-react';
 import { fmt } from './utils';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
     loadData: () => void;
     logoutStaff: (payload: FormData) => void;
     onGoHome?: () => void;
+    onOpenCustomize?: () => void;
 }
 
 export function BillingHeader({
@@ -20,7 +21,8 @@ export function BillingHeader({
     setRefreshing,
     loadData,
     logoutStaff,
-    onGoHome
+    onGoHome,
+    onOpenCustomize
 }: Props) {
     return (
         <header className="bg-[#4E1414] text-[#F6EEDF] px-6 py-4 shadow-md sticky top-0 z-30 border-b border-[#C9974A]/30">
@@ -64,11 +66,22 @@ export function BillingHeader({
                 </div>
 
                 {/* Header stats & actions */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                     <div className="hidden lg:flex gap-6 text-[11px] font-black uppercase tracking-wider text-[#C9974A]/80">
                         <span>Register Revenue: <b className="text-[#F6EEDF]">{fmt(dayStats.revenue)}</b></span>
                         <span>Billed checkouts: <b className="text-[#F6EEDF]">{dayStats.bills}</b></span>
                     </div>
+
+                    {onOpenCustomize && (
+                        <button
+                            onClick={onOpenCustomize}
+                            className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#C9974A] hover:text-[#F6EEDF] transition-all text-xs font-bold cursor-pointer"
+                            title="Customize Dashboard Layout"
+                        >
+                            <SlidersHorizontal className="w-4 h-4" />
+                            <span className="hidden md:inline">Customize</span>
+                        </button>
+                    )}
 
                     <button
                         onClick={() => { setRefreshing(true); loadData(); }}

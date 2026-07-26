@@ -9,6 +9,7 @@ import { BillingTakeaway } from './components/BillingTakeaway';
 import { BillingHistory } from './components/BillingHistory';
 import { BillingReports } from './components/BillingReports';
 import { BillingOnlineOrders } from './components/BillingOnlineOrders';
+import { CustomizeDashboardDrawer } from './components/CustomizeDashboardDrawer';
 import { AdminStaff } from '@/app/staff/admin/components/AdminStaff';
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { AdminExport } from '@/app/staff/admin/components/AdminExport';
@@ -17,7 +18,7 @@ import { logoutStaff } from '@/features/ordering/actions/auth';
 import { simulateOnlineOrder } from '@/features/ordering/actions/adminActions';
 import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
 import { AnimatePresence, motion } from 'framer-motion';
-import { 
+import {
     X, ShieldAlert, Users, User, LayoutGrid, FileSpreadsheet, Loader2,
     Settings, Activity, TrendingUp, RefreshCw, LogOut, Menu, IndianRupee,
     Play, CheckCircle2, AlertCircle, ShoppingBag, ChefHat, Globe
@@ -40,7 +41,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
 
     return (
         <div className="min-h-screen bg-[#F6EEDF] text-[#4E1414] flex flex-col font-sans relative overflow-hidden">
-            
+
             {/* ── POS Status Bar Alerts ── */}
             <AnimatePresence>
                 {s.deniedPermission && (
@@ -57,23 +58,24 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
             </AnimatePresence>
 
             {/* ── Sleek Light Cashier Header ── */}
-            <BillingHeader 
-                dayStats={s.dayStats} 
-                refreshing={s.refreshing} 
-                setIsSidebarOpen={s.setIsSidebarOpen} 
-                setRefreshing={s.setRefreshing} 
-                loadData={s.loadData} 
-                logoutStaff={logoutStaff} 
+            <BillingHeader
+                dayStats={s.dayStats}
+                refreshing={s.refreshing}
+                setIsSidebarOpen={s.setIsSidebarOpen}
+                setRefreshing={s.setRefreshing}
+                loadData={s.loadData}
+                logoutStaff={logoutStaff}
                 onGoHome={() => { s.setView('bento'); s.setSelectedTable(null); }}
+                onOpenCustomize={() => s.setIsCustomizeOpen(true)}
             />
 
             {/* ── Main Viewport Content ── */}
             <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                
+
                 {/* Left Area - Bento Dashboard Grid OR expanded list views */}
                 <div className="lg:col-span-8 space-y-6">
-                                        {s.view === 'bento' && (
-                        <BentoDashboard 
+                    {s.view === 'bento' && (
+                        <BentoDashboard
                             tables={s.tables}
                             handleSelectTable={s.handleSelectTable}
                             hasPerm={s.hasPerm}
@@ -96,6 +98,8 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             handleOpenSession={s.handleOpenSession}
                             setView={s.setView}
                             loadData={s.loadData}
+                            visibleWidgets={s.userVisibleWidgets}
+                            widgetOrder={s.userWidgetOrder}
                         />
                     )}
                     {s.view === 'tables' && (
@@ -104,7 +108,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 <h2 className="font-bold text-lg">Tables List Map</h2>
                                 <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Bento Dashboard</button>
                             </div>
-                            <AdminTablesLive 
+                            <AdminTablesLive
                                 onTableClick={(t) => {
                                     const cashierTable = s.tables.find(x => x.id === t.id);
                                     if (cashierTable) {
@@ -117,10 +121,10 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                     )}
 
                     {s.view === 'takeaway' && (
-                        <BillingTakeaway 
-                            takeawayOrders={s.takeawayOrders} 
-                            setView={s.setView} 
-                            handleSelectTable={s.handleSelectTable} 
+                        <BillingTakeaway
+                            takeawayOrders={s.takeawayOrders}
+                            setView={s.setView}
+                            handleSelectTable={s.handleSelectTable}
                             menuItemsList={s.menuItemsList}
                             loadData={s.loadData}
                         />
@@ -135,17 +139,17 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                     )}
 
                     {s.view === 'history' && (
-                        <BillingHistory 
-                            history={s.history} 
-                            setView={s.setView} 
+                        <BillingHistory
+                            history={s.history}
+                            setView={s.setView}
                         />
                     )}
 
                     {s.view === 'reports' && (
-                        <BillingReports 
-                            dayStats={s.dayStats} 
-                            setView={s.setView} 
-                            selectedReport={s.selectedReport} 
+                        <BillingReports
+                            dayStats={s.dayStats}
+                            setView={s.setView}
+                            selectedReport={s.selectedReport}
                             setSelectedReport={s.setSelectedReport}
                             history={s.history}
                             menuItemsList={s.menuItemsList}
@@ -197,13 +201,12 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 </div>
                                                 <p className="text-[10px] text-[#C9974A] font-bold mt-0.5">{item.categories?.name || 'Item'} · ₹{item.price}</p>
                                             </div>
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex-shrink-0 ${
-                                                !item.is_available
-                                                    ? 'bg-red-100 text-red-700 border border-red-200'
-                                                    : item.stock_qty !== null
-                                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                                        : 'bg-green-100 text-green-700 border border-green-200'
-                                            }`}>
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex-shrink-0 ${!item.is_available
+                                                ? 'bg-red-100 text-red-700 border border-red-200'
+                                                : item.stock_qty !== null
+                                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                                    : 'bg-green-100 text-green-700 border border-green-200'
+                                                }`}>
                                                 {!item.is_available ? 'Out of Stock' : item.stock_qty !== null ? `Limited: ${item.stock_qty}` : 'In Stock'}
                                             </span>
                                         </div>
@@ -261,7 +264,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
 
                 {/* Right Area (POS Checkout Settle Panel & Aggregator Notification Bento Box) */}
                 <div className="lg:col-span-4 flex flex-col gap-6 sticky top-24 self-start">
-                    <BillingCheckout 
+                    <BillingCheckout
                         selectedTable={s.selectedTable}
                         setSelectedTable={s.setSelectedTable}
                         isRegisterOpen={s.isRegisterOpen}
@@ -299,14 +302,14 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                     <p className="text-[9px] text-gray-400">Live order sync alerts</p>
                                 </div>
                             </div>
-                            
+
                             {/* Small quick settings toggles */}
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => s.toggleAggregator('swiggy')}
                                     className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1 cursor-pointer border
-                                        ${s.restaurantSettings?.swiggy_enabled 
-                                            ? 'bg-[#FC8019]/10 border-[#FC8019] text-[#FC8019]' 
+                                        ${s.restaurantSettings?.swiggy_enabled
+                                            ? 'bg-[#FC8019]/10 border-[#FC8019] text-[#FC8019]'
                                             : 'bg-gray-50 border-gray-200 text-gray-400'}`}
                                 >
                                     <span className={`w-1.5 h-1.5 rounded-full ${s.restaurantSettings?.swiggy_enabled ? 'bg-[#FC8019] animate-ping' : 'bg-gray-300'}`} />
@@ -315,8 +318,8 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 <button
                                     onClick={() => s.toggleAggregator('zomato')}
                                     className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1 cursor-pointer border
-                                        ${s.restaurantSettings?.zomato_enabled 
-                                            ? 'bg-[#E23744]/10 border-[#E23744] text-[#E23744]' 
+                                        ${s.restaurantSettings?.zomato_enabled
+                                            ? 'bg-[#E23744]/10 border-[#E23744] text-[#E23744]'
                                             : 'bg-gray-50 border-gray-200 text-gray-400'}`}
                                 >
                                     <span className={`w-1.5 h-1.5 rounded-full ${s.restaurantSettings?.zomato_enabled ? 'bg-[#E23744] animate-ping' : 'bg-gray-300'}`} />
@@ -337,8 +340,8 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                     <div key={order.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 space-y-2.5">
                                         <div className="flex justify-between items-start">
                                             <div className="flex items-center gap-2">
-                                                <span 
-                                                    style={{ backgroundColor: brandColor }} 
+                                                <span
+                                                    style={{ backgroundColor: brandColor }}
                                                     className="w-6 h-6 rounded-lg text-white font-black text-xs flex items-center justify-center shadow"
                                                 >
                                                     {brandLetter}
@@ -348,7 +351,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                     <p className="text-[8px] text-gray-400">Total: {fmt(orderTotalAmt)}</p>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Cancel order button */}
                                             <button
                                                 onClick={async () => {
@@ -409,7 +412,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 <div className="text-center py-6 border border-dashed border-gray-100 rounded-2xl flex flex-col justify-center items-center gap-2">
                                     <CheckCircle2 className="w-6 h-6 text-green-500 opacity-60" />
                                     <p className="text-[10px] text-gray-400 font-bold">No active aggregator alerts</p>
-                                    
+
                                     {/* Quick simulators */}
                                     <div className="flex gap-1.5 mt-1.5">
                                         <button
@@ -445,11 +448,11 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
             {/* ── Left Collapsible Sliding Drawer (Operations Sidebar) ── */}
             <AnimatePresence>
                 {s.isSidebarOpen && (
-                    <BillingSidebar 
-                        isSidebarOpen={s.isSidebarOpen} 
-                        setIsSidebarOpen={s.setIsSidebarOpen} 
-                        hasPerm={s.hasPerm} 
-                        handleSidebarAction={s.handleSidebarAction} 
+                    <BillingSidebar
+                        isSidebarOpen={s.isSidebarOpen}
+                        setIsSidebarOpen={s.setIsSidebarOpen}
+                        hasPerm={s.hasPerm}
+                        handleSidebarAction={s.handleSidebarAction}
                     />
                 )}
             </AnimatePresence>
@@ -681,21 +684,33 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 </button>
                             </div>
                             <div className="p-6 overflow-y-auto taj-scrollbar">
-                                <AdminExport 
-                                    orders={s.history} 
-                                    menu={s.menuItemsList} 
-                                    staff={s.staffList} 
+                                <AdminExport
+                                    orders={s.history}
+                                    menu={s.menuItemsList}
+                                    staff={s.staffList}
                                     customers={s.guests.map(g => ({
                                         phone: g.phone,
                                         name: g.name,
                                         visits: g.totalVisits,
                                         totalSpent: g.totalSpent,
                                         lastVisit: g.lastVisit || new Date().toISOString()
-                                    }))} 
+                                    }))}
                                 />
                             </div>
                         </motion.div>
                     </div>
+                )}
+                {s.isCustomizeOpen && (
+                    <CustomizeDashboardDrawer
+                        role={s.currentRoleName ?? 'cashier'}
+                        visibleWidgets={s.userVisibleWidgets}
+                        widgetOrder={s.userWidgetOrder}
+                        onSave={(widgets, order) => {
+                            s.setUserVisibleWidgets(widgets);
+                            s.setUserWidgetOrder(order);
+                        }}
+                        onClose={() => s.setIsCustomizeOpen(false)}
+                    />
                 )}
 
                 {s.activeOpModal === 'CRM Customers' && (
@@ -715,9 +730,9 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 </button>
                             </div>
                             <div className="p-6 overflow-y-auto taj-scrollbar bg-white">
-                                <AdminCRM 
-                                    customers={s.guests} 
-                                    orders={s.history} 
+                                <AdminCRM
+                                    customers={s.guests}
+                                    orders={s.history}
                                     settings={s.settings}
                                 />
                             </div>

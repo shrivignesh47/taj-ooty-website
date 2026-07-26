@@ -906,7 +906,16 @@ Full form persisting to `restaurant_settings`:
 ```bash
 # .env.local
 
+# ACTIVE — Local Supabase
+NEXT_PUBLIC_SUPABASE_URL="http://localhost:54321"
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<redacted>
+SUPABASE_SERVICE_ROLE_KEY=<redacted>
+NEXT_PUBLIC_SITE_URL="http://localhost:3000"
 
+# COMMENTED OUT — Cloud Supabase backup
+# NEXT_PUBLIC_SUPABASE_URL=<redacted>
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+# SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` — used in Server Actions via `supabaseAdmin` client (bypasses RLS). Never exposed to browser.

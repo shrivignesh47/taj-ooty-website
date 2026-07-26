@@ -45,7 +45,7 @@ export function BillingSidebar({
                 { id: 'takeaway', label: 'Takeaway Counter Queue', icon: ClipboardList, perm: 'view_orders' },
                 { id: 'online_orders', label: 'Online Delivery Queue (Swiggy/Zomato)', icon: ClipboardList, perm: 'view_orders' },
                 { id: 'Kitchen Tickets', label: 'Kitchen Tickets Queue', icon: ChefHat, perm: 'view_kitchen_queue' },
-                { id: 'stock_inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'view_menu' },
+                { id: 'stock_inventory', label: 'Menu Stock Availability', icon: BookOpen, perm: 'edit_menu' },
             ]
         },
         {
@@ -54,8 +54,8 @@ export function BillingSidebar({
             icon: Users,
             items: [
                 { id: 'Staff Roster', label: 'Staff Roster Management', icon: Users, perm: 'manage_staff' },
-                { id: 'Drawer Session', label: 'Register Drawer Shift', icon: Activity, perm: 'manage_cash_drawer' },
-                { id: 'Petty Expenses', label: 'Petty Cash Expenses', icon: TrendingUp, perm: 'manage_expenses' },
+                { id: 'Drawer Session', label: 'Register Drawer Shift', icon: Activity, perm: 'view_billing' },
+                { id: 'Petty Expenses', label: 'Petty Cash Expenses', icon: TrendingUp, perm: 'view_billing' },
             ]
         },
         {

@@ -1,9 +1,9 @@
 "use client";
 
 import { motion } from 'framer-motion';
-import { 
-    BarChart3, ArrowLeft, Banknote, CreditCard, QrCode, 
-    TrendingUp 
+import {
+    BarChart3, ArrowLeft, Banknote, CreditCard, QrCode,
+    TrendingUp
 } from 'lucide-react';
 import { fmt } from './utils';
 
@@ -110,18 +110,19 @@ export function BillingReports({
 
             {/* Bento Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
+
                 {/* 1. Large Main Revenue Bento Card (Col-span 2) */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="md:col-span-2 bg-[#4E1414] border border-[#C9974A]/30 p-6 rounded-3xl text-[#F6EEDF] shadow-sm flex flex-col justify-between relative overflow-hidden group min-h-[220px]"
+                    whileHover={{ y: -2 }}
+                    className="md:col-span-2 bg-gradient-to-br from-[#4E1414] to-[#350C0C] border border-[#C9974A]/30 border-t-2 border-t-[#C9974A] p-6 rounded-3xl text-[#F6EEDF] shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between relative overflow-hidden group min-h-[220px]"
                 >
                     {/* Decorative Background Pattern */}
                     <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-6 translate-y-6 pointer-events-none transition-transform group-hover:scale-110 duration-500">
                         <BarChart3 className="w-64 h-64" />
                     </div>
-                    
+
                     <div className="space-y-2">
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#C9974A] bg-[#F6EEDF]/10 px-2.5 py-1 rounded-full">Aggregate Gross Revenue</span>
                         <div className="flex items-baseline gap-2 pt-2">
@@ -147,14 +148,20 @@ export function BillingReports({
                 </motion.div>
 
                 {/* 2. Payment Distribution Bento Card */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
-                    className="bg-white border border-[#C9974A]/30 p-6 rounded-3xl shadow-sm flex flex-col justify-between min-h-[220px]"
+                    whileHover={{ y: -2 }}
+                    className="bg-gradient-to-br from-white to-[#F6EEDF]/40 border border-[#C9974A]/30 border-t-2 border-t-[#C9974A] p-6 rounded-3xl shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between min-h-[220px]"
                 >
                     <div className="space-y-1">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414]">Settlement Breakdown</h4>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414] flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-[#C9974A]/10 flex items-center justify-center shrink-0">
+                                <QrCode className="w-4 h-4 text-[#C9974A]" />
+                            </span>
+                            Settlement Breakdown
+                        </h4>
                         <p className="text-[10px] text-gray-400">Shift collection methods distribution.</p>
                     </div>
 
@@ -195,14 +202,20 @@ export function BillingReports({
                 </motion.div>
 
                 {/* 3. Category Sales Bento Card */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-white border border-[#C9974A]/30 p-6 rounded-3xl shadow-sm flex flex-col justify-between min-h-[220px]"
+                    whileHover={{ y: -2 }}
+                    className="bg-gradient-to-br from-white to-[#F6EEDF]/40 border border-[#C9974A]/30 border-t-2 border-t-[#C9974A] p-6 rounded-3xl shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between min-h-[220px]"
                 >
                     <div className="space-y-1">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414]">Category Contributions</h4>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414] flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-[#C9974A]/10 flex items-center justify-center shrink-0">
+                                <TrendingUp className="w-4 h-4 text-[#C9974A]" />
+                            </span>
+                            Category Contributions
+                        </h4>
                         <p className="text-[10px] text-gray-400">Total volume and revenue by section.</p>
                     </div>
 
@@ -225,14 +238,20 @@ export function BillingReports({
                 </motion.div>
 
                 {/* 4. Top Selling Items (Col-span 2) */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.15 }}
-                    className="md:col-span-2 bg-white border border-[#C9974A]/30 p-6 rounded-3xl shadow-sm flex flex-col justify-between min-h-[220px]"
+                    whileHover={{ y: -2 }}
+                    className="md:col-span-2 bg-gradient-to-br from-white to-[#F6EEDF]/40 border border-[#C9974A]/30 border-t-2 border-t-[#C9974A] p-6 rounded-3xl shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between min-h-[220px]"
                 >
                     <div className="space-y-1 pb-3">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414]">Popular Items Distribution</h4>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#4E1414] flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-[#C9974A]/10 flex items-center justify-center shrink-0">
+                                <BarChart3 className="w-4 h-4 text-[#C9974A]" />
+                            </span>
+                            Popular Items Distribution
+                        </h4>
                         <p className="text-[10px] text-gray-400">Top billing items by quantities sold and aggregate revenue.</p>
                     </div>
 
@@ -255,8 +274,12 @@ export function BillingReports({
                                 ))}
                                 {topSellingItems.length === 0 && (
                                     <tr>
-                                        <td colSpan={3} className="text-center text-xs text-gray-400 italic py-10">
-                                            No sales logged for this shift yet.
+                                        <td colSpan={3} className="py-10">
+                                            <div className="text-center py-6 px-4 bg-[#F6EEDF]/30 border border-dashed border-[#C9974A]/30 rounded-2xl flex flex-col justify-center items-center gap-2 mx-4">
+                                                <TrendingUp className="w-6 h-6 text-[#C9974A] opacity-60" />
+                                                <p className="text-[11px] text-[#4E1414] font-bold">No sales yet this shift</p>
+                                                <p className="text-[9px] text-gray-500">Top items will appear here once bills are settled.</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
