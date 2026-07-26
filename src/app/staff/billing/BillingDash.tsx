@@ -291,45 +291,44 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                         loadData={s.loadData}
                     />
 
-                    {/* Swiggy & Zomato Realtime Notification Bento Card */}
-                    <div className="bg-white border border-[#C9974A]/30 rounded-3xl p-5 shadow-sm space-y-4">
-                        {/* Header */}
-                        <div className="flex justify-between items-center pb-3 border-b border-[#C9974A]/25">
-                            <div className="flex items-center gap-2">
-                                <Globe className="w-4 h-4 text-[#C9974A] animate-spin" style={{ animationDuration: '6s' }} />
-                                <div>
-                                    <h4 className="font-bold text-xs text-[#4E1414]">Aggregator Gates</h4>
-                                    <p className="text-[9px] text-gray-400">Live order sync alerts</p>
+                    {/* Swiggy & Zomato Realtime Notification Card */}
+                    <div className="bg-white border border-stone-200/80 rounded-xl shadow-2xs overflow-hidden">
+                        <div className="px-4 py-2.5 bg-stone-50/80 border-b border-stone-200/70 flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="p-1 bg-[#4E1414]/5 text-[#C9974A] rounded-md shrink-0">
+                                    <Globe className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '6s' }} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="font-extrabold text-[11px] uppercase tracking-wider text-[#4E1414] truncate">Aggregator Gates</h4>
+                                    <p className="text-[9px] text-gray-400 font-normal truncate">Swiggy &amp; Zomato Sync</p>
                                 </div>
                             </div>
-
-                            {/* Small quick settings toggles */}
-                            <div className="flex gap-2">
+                            <div className="flex gap-1 shrink-0">
                                 <button
                                     onClick={() => s.toggleAggregator('swiggy')}
-                                    className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1 cursor-pointer border
+                                    className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer border
                                         ${s.restaurantSettings?.swiggy_enabled
-                                            ? 'bg-[#FC8019]/10 border-[#FC8019] text-[#FC8019]'
-                                            : 'bg-gray-50 border-gray-200 text-gray-400'}`}
+                                            ? 'bg-orange-50 border-orange-200 text-orange-700'
+                                            : 'bg-stone-100 border-stone-200 text-stone-400'}`}
                                 >
-                                    <span className={`w-1.5 h-1.5 rounded-full ${s.restaurantSettings?.swiggy_enabled ? 'bg-[#FC8019] animate-ping' : 'bg-gray-300'}`} />
+                                    <span className={`w-1 h-1 rounded-full ${s.restaurantSettings?.swiggy_enabled ? 'bg-orange-500 animate-ping' : 'bg-stone-300'}`} />
                                     Swiggy
                                 </button>
                                 <button
                                     onClick={() => s.toggleAggregator('zomato')}
-                                    className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1 cursor-pointer border
+                                    className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer border
                                         ${s.restaurantSettings?.zomato_enabled
-                                            ? 'bg-[#E23744]/10 border-[#E23744] text-[#E23744]'
-                                            : 'bg-gray-50 border-gray-200 text-gray-400'}`}
+                                            ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                            : 'bg-stone-100 border-stone-200 text-stone-400'}`}
                                 >
-                                    <span className={`w-1.5 h-1.5 rounded-full ${s.restaurantSettings?.zomato_enabled ? 'bg-[#E23744] animate-ping' : 'bg-gray-300'}`} />
+                                    <span className={`w-1 h-1 rounded-full ${s.restaurantSettings?.zomato_enabled ? 'bg-rose-500 animate-ping' : 'bg-stone-300'}`} />
                                     Zomato
                                 </button>
                             </div>
                         </div>
 
                         {/* List of active pending / confirmed aggregator orders */}
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto taj-scrollbar-dark pr-1">
+                        <div className="p-3 space-y-2 max-h-[220px] overflow-y-auto taj-scrollbar-dark">
                             {s.onlineOrders.filter((o: any) => ['pending', 'confirmed'].includes(o.status)).map((order: any) => {
                                 const orderTotalAmt = order.order_items.reduce((acc: number, i: any) => acc + (i.price_at_order * i.qty), 0);
                                 const brandColor = order.source === 'swiggy' ? '#FC8019' : '#E23744';
@@ -337,22 +336,21 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 const isPending = order.status === 'pending';
 
                                 return (
-                                    <div key={order.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 space-y-2.5">
+                                    <div key={order.id} className="bg-stone-50 border border-stone-100 rounded-lg p-2 space-y-1.5 text-xs">
                                         <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5">
                                                 <span
                                                     style={{ backgroundColor: brandColor }}
-                                                    className="w-6 h-6 rounded-lg text-white font-black text-xs flex items-center justify-center shadow"
+                                                    className="w-5 h-5 rounded text-white font-black text-[10px] flex items-center justify-center shadow-2xs"
                                                 >
                                                     {brandLetter}
                                                 </span>
                                                 <div>
-                                                    <span className="font-extrabold text-xs text-[#4E1414]">{order.customer_name}</span>
+                                                    <span className="font-bold text-xs text-[#4E1414]">{order.customer_name}</span>
                                                     <p className="text-[8px] text-gray-400">Total: {fmt(orderTotalAmt)}</p>
                                                 </div>
                                             </div>
 
-                                            {/* Cancel order button */}
                                             <button
                                                 onClick={async () => {
                                                     if (confirm('Cancel this online order?')) {
@@ -361,24 +359,22 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                         else s.loadData();
                                                     }
                                                 }}
-                                                className="text-[9px] text-red-500 hover:text-red-700 font-extrabold cursor-pointer transition-colors"
+                                                className="text-[9px] text-rose-600 hover:underline font-bold cursor-pointer"
                                             >
-                                                Reject / Cancel
+                                                Reject
                                             </button>
                                         </div>
 
-                                        {/* Items */}
-                                        <div className="text-[10px] text-gray-600 bg-white rounded-lg p-2 border border-gray-100">
+                                        <div className="text-[9px] text-gray-600 bg-white rounded p-1.5 border border-stone-100 space-y-0.5">
                                             {order.order_items.map((i: any, idx: number) => (
                                                 <div key={idx} className="flex justify-between">
                                                     <span>{i.menu_items?.name}</span>
-                                                    <span className="font-semibold">x{i.qty}</span>
+                                                    <span className="font-bold">x{i.qty}</span>
                                                 </div>
                                             ))}
                                         </div>
 
-                                        {/* Actions */}
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-1">
                                             {isPending ? (
                                                 <button
                                                     onClick={async () => {
@@ -387,9 +383,9 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                         else s.loadData();
                                                     }}
                                                     style={{ backgroundColor: brandColor }}
-                                                    className="flex-1 text-white font-extrabold text-[10px] py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-xs hover:brightness-95 transition-all cursor-pointer"
+                                                    className="flex-1 text-white font-bold text-[9px] py-1 rounded flex items-center justify-center gap-1 shadow-2xs hover:brightness-95 cursor-pointer"
                                                 >
-                                                    <CheckCircle2 className="w-3 h-3" /> Accept Order
+                                                    <CheckCircle2 className="w-2.5 h-2.5" /> Accept Order
                                                 </button>
                                             ) : (
                                                 <button
@@ -398,9 +394,9 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                         if ('error' in res) alert(res.error);
                                                         else s.loadData();
                                                     }}
-                                                    className="flex-1 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-extrabold text-[10px] py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer"
+                                                    className="flex-1 bg-[#4E1414] text-[#F6EEDF] font-bold text-[9px] py-1 rounded flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
                                                 >
-                                                    <ChefHat className="w-3 h-3 text-[#C9974A]" /> Move to Kitchen
+                                                    <ChefHat className="w-2.5 h-2.5 text-[#C9974A]" /> Move to Kitchen
                                                 </button>
                                             )}
                                         </div>
@@ -409,12 +405,11 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             })}
 
                             {s.onlineOrders.filter((o: any) => ['pending', 'confirmed'].includes(o.status)).length === 0 && (
-                                <div className="text-center py-6 border border-dashed border-gray-100 rounded-2xl flex flex-col justify-center items-center gap-2">
-                                    <CheckCircle2 className="w-6 h-6 text-green-500 opacity-60" />
-                                    <p className="text-[10px] text-gray-400 font-bold">No active aggregator alerts</p>
+                                <div className="text-center py-4 border border-dashed border-stone-200 rounded-lg flex flex-col justify-center items-center gap-1">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 opacity-70" />
+                                    <p className="text-[10px] text-gray-400 font-semibold">No active aggregator alerts</p>
 
-                                    {/* Quick simulators */}
-                                    <div className="flex gap-1.5 mt-1.5">
+                                    <div className="flex gap-1 mt-1">
                                         <button
                                             disabled={!s.restaurantSettings?.swiggy_enabled}
                                             onClick={async () => {
@@ -422,7 +417,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 if (!res.success) alert(res.error);
                                                 else s.loadData();
                                             }}
-                                            className="px-2.5 py-1 bg-gray-50 border border-gray-200 text-gray-500 hover:bg-[#FC8019]/10 hover:border-[#FC8019]/30 hover:text-[#FC8019] rounded-lg text-[8px] font-black uppercase transition-all disabled:opacity-40 cursor-pointer"
+                                            className="px-2 py-0.5 bg-stone-50 border border-stone-200 text-gray-600 hover:text-orange-600 rounded text-[8px] font-bold uppercase transition-all disabled:opacity-40 cursor-pointer"
                                         >
                                             + Swiggy
                                         </button>
@@ -433,13 +428,82 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 if (!res.success) alert(res.error);
                                                 else s.loadData();
                                             }}
-                                            className="px-2.5 py-1 bg-gray-50 border border-gray-200 text-gray-500 hover:bg-[#E23744]/10 hover:border-[#E23744]/30 hover:text-[#E23744] rounded-lg text-[8px] font-black uppercase transition-all disabled:opacity-40 cursor-pointer"
+                                            className="px-2 py-0.5 bg-stone-50 border border-stone-200 text-gray-600 hover:text-rose-600 rounded text-[8px] font-bold uppercase transition-all disabled:opacity-40 cursor-pointer"
                                         >
                                             + Zomato
                                         </button>
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+
+                    {/* ── Today's Shift Summary Card ── */}
+                    <div className="bg-white border border-stone-200/80 rounded-xl shadow-2xs overflow-hidden">
+                        <div className="px-4 py-2.5 bg-stone-50/80 border-b border-stone-200/70 flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="p-1 bg-[#4E1414]/5 text-[#C9974A] rounded-md shrink-0">
+                                    <TrendingUp className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="font-extrabold text-[11px] uppercase tracking-wider text-[#4E1414] truncate">Shift Summary</h4>
+                                    <p className="text-[9px] text-gray-400 font-normal truncate">Live Shift Revenue</p>
+                                </div>
+                            </div>
+                            <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                                Live
+                            </span>
+                        </div>
+
+                        <div className="p-3 space-y-3">
+                            <div className="bg-stone-900 text-white rounded-lg p-3">
+                                <p className="text-[8px] font-bold uppercase tracking-wider text-[#C9974A]">Gross Shift Revenue</p>
+                                <p className="text-xl font-black text-white mt-0.5">{fmt(s.dayStats.revenue)}</p>
+                                <div className="grid grid-cols-3 gap-2 mt-2 text-[9px] border-t border-stone-800 pt-2 text-stone-300">
+                                    <div>
+                                        <p className="text-stone-400 text-[8px] uppercase">Settled</p>
+                                        <p className="font-bold text-white text-xs">{s.dayStats.bills}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-stone-400 text-[8px] uppercase">Avg Bill</p>
+                                        <p className="font-bold text-white text-xs">{fmt(s.dayStats.avgBill)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-stone-400 text-[8px] uppercase">Tables</p>
+                                        <p className="font-bold text-white text-xs">{s.dayStats.activeTables}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5 text-xs">
+                                {[
+                                    { label: 'Cash', value: s.dayStats.cashSales, color: 'bg-emerald-500', textColor: 'text-emerald-700' },
+                                    { label: 'Card', value: s.dayStats.cardSales, color: 'bg-sky-500', textColor: 'text-sky-700' },
+                                    { label: 'UPI', value: s.dayStats.upiSales, color: 'bg-purple-500', textColor: 'text-purple-700' },
+                                ].map(({ label, value, color, textColor }) => {
+                                    const total = (s.dayStats.cashSales || 0) + (s.dayStats.cardSales || 0) + (s.dayStats.upiSales || 0);
+                                    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                                    return (
+                                        <div key={label} className="space-y-0.5">
+                                            <div className="flex justify-between text-[10px]">
+                                                <span className={`font-bold ${textColor}`}>{label}</span>
+                                                <span className="font-bold text-[#4E1414]">{fmt(value || 0)} <span className="text-gray-400 font-normal">({pct}%)</span></span>
+                                            </div>
+                                            <div className="h-1 bg-stone-100 rounded-full overflow-hidden">
+                                                <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => s.setView('reports')}
+                                className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-[#C9974A] hover:text-[#4E1414] border border-stone-200 bg-stone-50 hover:bg-stone-100 rounded-lg py-1.5 transition-all cursor-pointer"
+                            >
+                                <FileSpreadsheet className="w-3 h-3" /> View Reports &rarr;
+                            </button>
                         </div>
                     </div>
                 </div>

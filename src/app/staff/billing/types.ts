@@ -80,3 +80,13 @@ export interface AttendanceLog {
 
 export type MainView = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders' | 'stock_inventory';
 export type PayMethod = 'cash' | 'card' | 'upi';
+
+export interface BillingWorkspaceNavProps {
+    activeView: MainView;
+    onViewChange: (view: MainView) => void;
+    onOpenShift: () => void;
+    activeTableCount: number;
+    pendingSettlementCount: number;
+    onlineOrderCount: number;
+    stats: Pick<DayStats, 'revenue' | 'bills'>;
+}

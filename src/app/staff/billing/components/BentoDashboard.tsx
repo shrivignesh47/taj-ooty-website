@@ -1,364 +1,258 @@
-"use client";
+﻿"use client";
 
-import { useState } from 'react';
-import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
+import { useState } from "react";
+import { AdminTablesLive } from "@/app/staff/admin/components/AdminTablesLive";
 import {
-    LayoutGrid, BookOpen, ChefHat, CalendarRange, User, Activity, Flame,
-    ShoppingBag, Plus, ArrowRight, CheckCircle2, Clock
-} from 'lucide-react';
-import { fmt, orderTotal } from './utils';
-import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
-import { BillingTakeawayCreator } from './BillingTakeawayCreator';
+    LayoutGrid, ChefHat, CalendarRange, Activity, Flame,
+    ShoppingBag, Plus, ArrowRight, CheckCircle2, Clock,
+    Search, Package, AlertCircle
+} from "lucide-react";
+import { fmt, orderTotal } from "./utils";
+import { advanceOrderStatus } from "@/features/ordering/actions/updateOrderStatus";
+import { BillingTakeawayCreator } from "./BillingTakeawayCreator";
 
 interface Props {
-    tables: any[];
-    handleSelectTable: (table: any) => void;
-    hasPerm: (perm: string) => boolean;
-    menuItemsList: any[];
-    handleToggleItemStock: (itemId: string, currentVal: boolean) => void;
-    activeOrders: any[];
-    takeawayOrders: any[];
-    attendanceStaffId: string;
-    setAttendanceStaffId: (id: string) => void;
-    staffList: any[];
-    handleStaffAttendance: (action: 'clock_in' | 'clock_out') => void;
-    attendanceLogs: any[];
-    guests: any[];
-    openingFloat: number;
-    expectedCash: number;
-    dayStats: any;
-    isRegisterOpen: boolean;
+    tables: any[]; handleSelectTable: (table: any) => void; hasPerm: (perm: string) => boolean;
+    menuItemsList: any[]; handleToggleItemStock: (itemId: string, currentVal: boolean) => void;
+    activeOrders: any[]; takeawayOrders: any[];
+    attendanceStaffId: string; setAttendanceStaffId: (id: string) => void;
+    staffList: any[]; handleStaffAttendance: (action: "clock_in" | "clock_out") => void;
+    attendanceLogs: any[]; guests: any[];
+    openingFloat: number; expectedCash: number; dayStats: any; isRegisterOpen: boolean;
     handleSidebarAction: (actionId: string, permKey: string) => void;
-    history: any[];
-    handleOpenSession: (float: number) => Promise<void>;
-    setView: (view: any) => void;
-    loadData: () => Promise<void>;
-    visibleWidgets?: string[];
-    widgetOrder?: string[];
+    history: any[]; handleOpenSession: (float: number) => Promise<void>;
+    setView: (view: any) => void; loadData: () => Promise<void>;
+    visibleWidgets?: string[]; widgetOrder?: string[];
+}
+
+function CardHeader({ icon: Icon, title, subtitle, badge }: { icon: React.ElementType; title: string; subtitle?: string; badge?: React.ReactNode; }) {
+    return (
+        <div className="px-4 py-2.5 bg-stone-50/80 border-b border-stone-200/70 flex justify-between items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 bg-[#4E1414]/5 text-[#C9974A] rounded-md shrink-0"><Icon className="w-3.5 h-3.5" /></div>
+                <div className="min-w-0">
+                    <h3 className="font-extrabold text-[11px] uppercase tracking-wider text-[#4E1414] truncate">{title}</h3>
+                    {subtitle && <p className="text-[9px] text-gray-400 font-normal truncate">{subtitle}</p>}
+                </div>
+            </div>
+            {badge && <div className="shrink-0">{badge}</div>}
+        </div>
+    );
+}
+
+function Pill({ children, variant = "default", pulse = false }: { children: React.ReactNode; variant?: "default"|"green"|"amber"|"red"|"orange"|"blue"; pulse?: boolean; }) {
+    const map = {
+        default: "bg-gray-100 text-gray-600 border-gray-200",
+        green:   "bg-emerald-50 text-emerald-700 border-emerald-200",
+        amber:   "bg-amber-50 text-amber-700 border-amber-200",
+        red:     "bg-rose-50 text-rose-700 border-rose-200",
+        orange:  "bg-orange-50 text-orange-700 border-orange-200",
+        blue:    "bg-sky-50 text-sky-700 border-sky-200",
+    };
+    return <span className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${map[variant]} ${pulse ? "animate-pulse" : ""}`}>{children}</span>;
+}
+
+function ElapsedBadge({ minutes }: { minutes: number }) {
+    const cls = minutes > 20 ? "bg-rose-100 text-rose-700 border-rose-200" : minutes > 10 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-emerald-100 text-emerald-700 border-emerald-200";
+    return <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full border ${cls}`}>{minutes}m</span>;
 }
 
 export function BentoDashboard({
-    tables,
-    handleSelectTable,
-    hasPerm,
-    menuItemsList,
-    handleToggleItemStock,
-    activeOrders,
-    takeawayOrders,
-    attendanceStaffId,
-    setAttendanceStaffId,
-    staffList,
-    handleStaffAttendance,
-    attendanceLogs,
-    guests,
-    openingFloat,
-    expectedCash,
-    dayStats,
-    isRegisterOpen,
-    handleSidebarAction,
-    history,
-    handleOpenSession,
-    setView,
-    loadData,
-    visibleWidgets,
-    widgetOrder
+    tables, handleSelectTable, hasPerm, menuItemsList, handleToggleItemStock,
+    activeOrders, takeawayOrders, attendanceStaffId, setAttendanceStaffId,
+    staffList, handleStaffAttendance, attendanceLogs, openingFloat, expectedCash,
+    dayStats, isRegisterOpen, handleSidebarAction, history, handleOpenSession,
+    setView, loadData, visibleWidgets,
 }: Props) {
-    // Default: every widget visible if no preference saved yet
-    const DEFAULT_WIDGETS = [
-        'floor_map', 'takeaway_desk', 'kot_monitor', 'stock_availability',
-        'staff_attendance', 'trending_dish', 'cash_register'
-    ];
-    const activeWidgets = visibleWidgets && visibleWidgets.length > 0 ? visibleWidgets : DEFAULT_WIDGETS;
-    const isWidgetVisible = (id: string) => activeWidgets.includes(id);
+    const DEFAULT_WIDGETS = ["floor_map","takeaway_desk","kot_monitor","stock_availability","staff_attendance","trending_dish","cash_register"];
+    const active = visibleWidgets && visibleWidgets.length > 0 ? visibleWidgets : DEFAULT_WIDGETS;
+    const show = (id: string) => active.includes(id);
+
     const [newFloat, setNewFloat] = useState(2500);
     const [showTakeawayModal, setShowTakeawayModal] = useState(false);
     const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+    const [stockSearch, setStockSearch] = useState("");
 
-    // Calculate trending item dynamically from shift history
+    const activeTakeawayOrders = takeawayOrders || [];
+    const takeawayRevenue = history.filter(o => o.source === "takeaway" || !o.table_id).reduce((sum, o) => sum + orderTotal(o), 0);
+
     const itemCounts: Record<string, { qty: number; name: string; isVeg: boolean }> = {};
-    const aggregateOrders = [...(activeOrders || []), ...(history || [])];
-    aggregateOrders.forEach(order => {
+    [...(activeOrders || []), ...(history || [])].forEach(order => {
         order.order_items?.forEach((i: any) => {
-            const itemName = i.menu_items?.name;
-            if (itemName) {
-                if (!itemCounts[itemName]) {
-                    itemCounts[itemName] = {
-                        qty: 0,
-                        name: itemName,
-                        isVeg: !!i.menu_items?.is_veg
-                    };
-                }
-                itemCounts[itemName].qty += i.qty;
-            }
+            const n = i.menu_items?.name; if (!n) return;
+            if (!itemCounts[n]) itemCounts[n] = { qty: 0, name: n, isVeg: !!i.menu_items?.is_veg };
+            itemCounts[n].qty += i.qty;
         });
     });
+    const topItems = Object.values(itemCounts).sort((a, b) => b.qty - a.qty).slice(0, 3);
+    const maxQty = topItems[0]?.qty || 1;
 
-    const trendingItem = Object.values(itemCounts).sort((a, b) => b.qty - a.qty)[0] || null;
+    const filteredMenu = menuItemsList.filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()));
+    const outOfStockCount = menuItemsList.filter(i => !i.is_available).length;
+    const totalTables = tables.length;
+    const occupiedCount = tables.filter(t => t.status !== "Empty").length;
+    const needsBill = tables.filter(t => t.status === "Awaiting Settlement").length;
+    const emptyCount = tables.filter(t => t.status === "Empty").length;
+    const onShift = attendanceLogs.filter((l: any) => !l.clock_out).length;
 
-    // Active Takeaway summary metrics
-    const activeTakeawayOrders = takeawayOrders || [];
-    const takeawayRevenue = history
-        .filter(o => o.source === 'takeaway' || !o.table_id)
-        .reduce((sum, o) => sum + orderTotal(o), 0);
-
-    // Handle KOT prep status advance
-    const handleAdvanceKOT = async (orderId: string, nextStatus: string) => {
+    const advanceKOT = async (orderId: string, next: string) => {
         setUpdatingOrderId(orderId);
-        const res = await advanceOrderStatus(orderId, nextStatus as any);
+        const res = await advanceOrderStatus(orderId, next as any);
         setUpdatingOrderId(null);
-        if ('error' in res) {
-            alert(res.error);
-        } else {
-            await loadData();
-        }
+        if ("error" in res) alert(res.error); else await loadData();
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-
-            {/* Quick Takeaway Creator Modal Overlay */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             {showTakeawayModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-[#C9974A]/40 max-h-[90vh] overflow-y-auto">
-                        <BillingTakeawayCreator
-                            menuItems={menuItemsList}
-                            takeawayOrdersCount={activeTakeawayOrders.length}
-                            onClose={() => setShowTakeawayModal(false)}
-                            loadData={loadData}
-                            handleSelectTable={handleSelectTable}
-                        />
+                    <div className="bg-white w-full max-w-2xl rounded-2xl p-5 shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto">
+                        <BillingTakeawayCreator menuItems={menuItemsList} takeawayOrdersCount={activeTakeawayOrders.length} onClose={() => setShowTakeawayModal(false)} loadData={loadData} handleSelectTable={handleSelectTable} />
                     </div>
                 </div>
             )}
 
-            {/* ── BENTO 1: Table Floor Grid Map ── */}
-            {isWidgetVisible('floor_map') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-12 space-y-4">
-                    <div className="flex flex-wrap justify-between items-center pb-2 border-b border-[#C9974A]/10 gap-3">
-                        <h3 className="font-bold text-sm uppercase tracking-wider text-[#4E1414] flex items-center gap-1.5">
-                            <LayoutGrid className="w-4 h-4 text-[#C9974A]" /> Dine-In Table Floor Map & Live Billing
-                        </h3>
-                        <span className="text-[10px] font-bold text-gray-400">Select any occupied table to open checkout panel</span>
-                    </div>
-                    <AdminTablesLive
-                        onTableClick={(t) => {
-                            const cashierTable = tables.find(x => x.id === t.id);
-                            if (cashierTable) {
-                                handleSelectTable(cashierTable);
-                            }
-                        }}
-                        readOnly={!hasPerm('manage_tables')}
+            {/* WIDGET 1 — Floor Map */}
+            {show("floor_map") && (
+                <div className="md:col-span-12 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden">
+                    <CardHeader icon={LayoutGrid} title="Dine-In Floor Map" subtitle="Select table to open checkout panel"
+                        badge={
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <Pill>{totalTables} Total</Pill>
+                                {occupiedCount > 0 && <Pill variant="amber" pulse>{occupiedCount} Occupied</Pill>}
+                                {needsBill > 0 && <Pill variant="red" pulse>{needsBill} Bill Pending</Pill>}
+                                <Pill variant="green">{emptyCount} Empty</Pill>
+                            </div>
+                        }
                     />
+                    <div className="p-3.5">
+                        <AdminTablesLive onTableClick={t => { const ct = tables.find(x => x.id === t.id); if (ct) handleSelectTable(ct); }} readOnly={!hasPerm("manage_tables")} />
+                    </div>
                 </div>
             )}
-            {/* ── BENTO 2: Takeaway Counter Overview (User Requirement #1) ── */}
-            {/* ── BENTO 2: Takeaway Counter Overview (User Requirement #1) ── */}
-            {isWidgetVisible('takeaway_desk') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-6 space-y-3 flex flex-col justify-between">
-                    <div>
-                        <div className="flex justify-between items-center pb-2 border-b border-[#C9974A]/10">
-                            <h3 className="font-bold text-xs uppercase tracking-wider text-[#4E1414] flex items-center gap-1.5">
-                                <ShoppingBag className="w-4 h-4 text-[#C9974A]" /> Takeaway & Counter Express Desk
-                            </h3>
-                            <span className="bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[9px] px-2 py-0.5 rounded-full">
-                                {activeTakeawayOrders.length} Active Pickups
-                            </span>
-                        </div>
 
-                        {/* Metric Quick Stats */}
-                        <div className="grid grid-cols-2 gap-3 my-3">
-                            <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/20 p-2.5 rounded-2xl">
-                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Active Takeaways</span>
+            {/* WIDGET 2 — Takeaway */}
+            {show("takeaway_desk") && (
+                <div className="md:col-span-6 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden flex flex-col justify-between">
+                    <div>
+                        <CardHeader icon={ShoppingBag} title="Takeaway Counter" subtitle="Express pickups & takeaway orders"
+                            badge={<Pill variant={activeTakeawayOrders.length > 0 ? "amber" : "default"} pulse={activeTakeawayOrders.length > 0}>{activeTakeawayOrders.length} Active</Pill>}
+                        />
+                        <div className="grid grid-cols-2 gap-2 p-3 border-b border-stone-100">
+                            <div className="bg-stone-50 border border-stone-100 p-2.5 rounded-lg">
+                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Active Pickups</p>
                                 <p className="text-base font-black text-[#4E1414] mt-0.5">{activeTakeawayOrders.length} orders</p>
                             </div>
-                            <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/20 p-2.5 rounded-2xl">
-                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Takeaway Sales</span>
-                                <p className="text-base font-black text-green-700 mt-0.5">{fmt(takeawayRevenue)}</p>
+                            <div className="bg-stone-50 border border-stone-100 p-2.5 rounded-lg">
+                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Today&apos;s Sales</p>
+                                <p className="text-base font-black text-emerald-700 mt-0.5">{fmt(takeawayRevenue)}</p>
                             </div>
                         </div>
-
-                        {/* Active Takeaway Orders Mini Queue */}
-                        <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1 taj-scrollbar-dark">
-                            {activeTakeawayOrders.map(order => {
-                                const totalAmt = orderTotal(order);
+                        <div className="overflow-y-auto max-h-[140px] p-3 space-y-1.5 taj-scrollbar-dark">
+                            {activeTakeawayOrders.length === 0 ? (
+                                <p className="text-center text-xs text-gray-400 italic py-5">No pending takeaway orders.</p>
+                            ) : activeTakeawayOrders.map((order: any) => {
+                                const elapsed = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
                                 return (
-                                    <div key={order.id} className="bg-gray-50 border border-gray-100 rounded-xl p-2.5 flex justify-between items-center text-xs">
+                                    <div key={order.id} className="bg-stone-50 border border-stone-100 rounded-lg p-2 flex justify-between items-center text-xs">
                                         <div>
                                             <div className="flex items-center gap-1.5">
-                                                <span className="font-extrabold text-[#4E1414]">#{order.token_no || order.id.slice(0, 4)}</span>
-                                                <span className="font-semibold text-gray-600">· {order.customer_name}</span>
+                                                <span className="font-bold text-[#4E1414]">#{order.token_no || order.id.slice(0,4)}</span>
+                                                <span className="text-gray-600 font-semibold">{order.customer_name}</span>
+                                                <ElapsedBadge minutes={elapsed} />
                                             </div>
-                                            <p className="text-[9px] text-gray-400 mt-0.5">{order.order_items.length} items · {fmt(totalAmt)}</p>
+                                            <p className="text-[9px] text-gray-400 mt-0.5">{order.order_items.length} items &middot; {fmt(orderTotal(order))}</p>
                                         </div>
-                                        <button
-                                            onClick={() => {
-                                                const dummyTable = {
-                                                    id: `takeaway_${order.id}`,
-                                                    table_no: 0,
-                                                    status: 'Occupied',
-                                                    customer_name: order.customer_name,
-                                                    customer_phone: order.customer_phone,
-                                                    orders: [order]
-                                                };
-                                                handleSelectTable(dummyTable);
-                                            }}
-                                            className="bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] text-[9px] font-extrabold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                                        >
-                                            Checkout <ArrowRight className="w-3 h-3 text-[#C9974A]" />
+                                        <button onClick={() => handleSelectTable({ id: `takeaway_${order.id}`, table_no: 0, status: "Occupied", customer_name: order.customer_name, customer_phone: order.customer_phone, orders: [order] })} className="bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] text-[9px] font-bold px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer">
+                                            Bill <ArrowRight className="w-2.5 h-2.5 text-[#C9974A]" />
                                         </button>
                                     </div>
                                 );
                             })}
-                            {activeTakeawayOrders.length === 0 && (
-                                <p className="text-center text-xs text-gray-400 italic py-6">No pending takeaway orders.</p>
-                            )}
                         </div>
                     </div>
-
-                    {/* Counter Quick Action Footer */}
-                    <div className="flex gap-2 pt-2 border-t border-[#C9974A]/10">
-                        <button
-                            onClick={() => setShowTakeawayModal(true)}
-                            className="flex-1 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-bold text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                        >
-                            <Plus className="w-4 h-4 text-[#C9974A]" /> + New Takeaway Order
+                    <div className="p-2.5 flex gap-2 border-t border-stone-100 shrink-0">
+                        <button onClick={() => setShowTakeawayModal(true)} className="flex-1 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-bold text-xs py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer shadow-2xs">
+                            <Plus className="w-3.5 h-3.5 text-[#C9974A]" /> + Takeaway
                         </button>
-                        <button
-                            onClick={() => setView('takeaway')}
-                            className="px-3 bg-white border border-[#C9974A]/40 text-[#4E1414] hover:bg-[#F6EEDF]/40 font-bold text-xs py-2 rounded-xl transition-all cursor-pointer"
-                        >
-                            Full List →
+                        <button onClick={() => setView("takeaway")} className="px-3 bg-white border border-stone-200 text-[#4E1414] hover:bg-stone-50 font-bold text-xs py-1.5 rounded-lg cursor-pointer">
+                            Full List &rarr;
                         </button>
                     </div>
                 </div>
             )}
 
-
-            {/* ── BENTO 3: Live Kitchen Ticket Queue (KOT) (User Requirement #3) ── */}
-            {isWidgetVisible('kot_monitor') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-6 space-y-3 flex flex-col justify-between">
+            {/* WIDGET 3 — KOT Monitor */}
+            {show("kot_monitor") && (
+                <div className="md:col-span-6 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden flex flex-col justify-between">
                     <div>
-                        <div className="flex justify-between items-center pb-2 border-b border-[#C9974A]/10">
-                            <h3 className="font-bold text-xs uppercase tracking-wider text-[#4E1414] flex items-center gap-1.5">
-                                <ChefHat className="w-4 h-4 text-[#C9974A]" /> Live Kitchen Tickets (KOT Monitor)
-                            </h3>
-                            <span className="bg-green-100 text-green-800 border border-green-300 font-extrabold text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5" /> Realtime KOT Sync
-                            </span>
-                        </div>
-
-                        <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 taj-scrollbar-dark my-2">
-                            {activeOrders.map(order => {
-                                const elapsed = Math.round((new Date().getTime() - new Date(order.created_at).getTime()) / 60000);
-                                const isUpdating = updatingOrderId === order.id;
-
+                        <CardHeader icon={ChefHat} title="Live Kitchen Tickets" subtitle="Realtime KOT Monitor"
+                            badge={<Pill variant="green"><Clock className="w-2.5 h-2.5" /> Realtime KOT Sync</Pill>}
+                        />
+                        <div className="overflow-y-auto max-h-[200px] p-3 space-y-2 taj-scrollbar-dark">
+                            {activeOrders.length === 0 ? (
+                                <p className="text-center text-xs text-gray-400 italic py-8">No active kitchen tickets.</p>
+                            ) : activeOrders.map((order: any) => {
+                                const elapsed = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
+                                const isUpd = updatingOrderId === order.id;
                                 return (
-                                    <div key={order.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 space-y-2 text-xs">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-extrabold text-[#4E1414] text-xs">
-                                                        {order.restaurant_tables ? `Table T-${order.restaurant_tables.table_no}` : `Takeaway #${order.token_no || order.id.slice(0, 4)}`}
-                                                    </span>
-                                                    <span className="text-[10px] text-gray-400">· {order.customer_name}</span>
-                                                </div>
-                                                <p className="text-[9px] text-gray-400 mt-0.5">{order.order_items.length} items · {elapsed}m ago</p>
+                                    <div key={order.id} className="bg-stone-50 border border-stone-100 rounded-lg p-2.5 space-y-1.5 text-xs">
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-[#4E1414]">
+                                                    {order.restaurant_tables ? `Table T-${order.restaurant_tables.table_no}` : `#${order.token_no || order.id.slice(0,4)}`}
+                                                </span>
+                                                <span className="text-[10px] text-gray-500">{order.customer_name}</span>
+                                                <ElapsedBadge minutes={elapsed} />
                                             </div>
-
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border
-                                            ${order.status === 'ready' ? 'bg-green-100 text-green-800 border-green-300' :
-                                                    order.status === 'preparing' ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse' :
-                                                        order.status === 'served' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                                            'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${order.status === "ready" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : order.status === "preparing" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" : "bg-stone-100 text-stone-700 border-stone-200"}`}>
                                                 {order.status}
                                             </span>
                                         </div>
-
-                                        {/* Item detail snippets */}
-                                        <div className="text-[10px] text-gray-600 bg-white rounded-xl p-2 border border-gray-100 space-y-1">
+                                        <div className="text-[10px] text-gray-600 bg-white rounded-md p-1.5 border border-stone-100 space-y-0.5">
                                             {order.order_items.map((i: any, idx: number) => (
-                                                <div key={idx} className="flex justify-between items-center">
-                                                    <span>{i.menu_items?.name} {i.notes ? <i className="text-gray-400 font-normal">({i.notes})</i> : ''}</span>
-                                                    <span className="font-bold text-[#4E1414]">×{i.qty}</span>
+                                                <div key={idx} className="flex justify-between">
+                                                    <span>{i.menu_items?.name} {i.notes && <i className="text-gray-400">({i.notes})</i>}</span>
+                                                    <span className="font-bold text-[#4E1414]">&times;{i.qty}</span>
                                                 </div>
                                             ))}
                                         </div>
-
-                                        {/* Action advance controls right from Cashier */}
-                                        <div className="flex gap-1.5 justify-end pt-1">
-                                            {order.status === 'pending' && (
-                                                <button
-                                                    disabled={isUpdating}
-                                                    onClick={() => handleAdvanceKOT(order.id, 'confirmed')}
-                                                    className="px-2.5 py-1 bg-[#C9974A] hover:bg-[#b08139] text-[#4E1414] font-extrabold text-[9px] rounded-lg transition-colors cursor-pointer"
-                                                >
-                                                    Accept Order
-                                                </button>
-                                            )}
-                                            {['pending', 'confirmed'].includes(order.status) && (
-                                                <button
-                                                    disabled={isUpdating}
-                                                    onClick={() => handleAdvanceKOT(order.id, 'preparing')}
-                                                    className="px-2.5 py-1 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-extrabold text-[9px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                                                >
-                                                    <ChefHat className="w-3 h-3 text-[#C9974A]" /> Start Prep
-                                                </button>
-                                            )}
-                                            {order.status === 'preparing' && (
-                                                <button
-                                                    disabled={isUpdating}
-                                                    onClick={() => handleAdvanceKOT(order.id, 'ready')}
-                                                    className="px-2.5 py-1 bg-green-700 hover:bg-green-800 text-white font-extrabold text-[9px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                                                >
-                                                    <CheckCircle2 className="w-3 h-3" /> Mark Ready
-                                                </button>
-                                            )}
-                                            {order.status === 'ready' && (
-                                                <button
-                                                    disabled={isUpdating}
-                                                    onClick={() => handleAdvanceKOT(order.id, 'served')}
-                                                    className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-[9px] rounded-lg transition-colors cursor-pointer"
-                                                >
-                                                    Mark Served
-                                                </button>
-                                            )}
+                                        <div className="flex gap-1 justify-end">
+                                            {order.status === "pending" && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "confirmed")} className="px-2 py-0.5 bg-[#C9974A] hover:bg-[#b08139] text-[#4E1414] font-bold text-[9px] rounded cursor-pointer">Accept</button>}
+                                            {["pending","confirmed"].includes(order.status) && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "preparing")} className="px-2 py-0.5 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-bold text-[9px] rounded flex items-center gap-1 cursor-pointer"><ChefHat className="w-2.5 h-2.5 text-[#C9974A]" /> Prep</button>}
+                                            {order.status === "preparing" && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "ready")} className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[9px] rounded flex items-center gap-1 cursor-pointer"><CheckCircle2 className="w-2.5 h-2.5" /> Ready</button>}
+                                            {order.status === "ready" && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "served")} className="px-2 py-0.5 bg-sky-700 hover:bg-sky-800 text-white font-bold text-[9px] rounded cursor-pointer">Served</button>}
                                         </div>
                                     </div>
                                 );
                             })}
-                            {activeOrders.length === 0 && (
-                                <p className="text-center text-xs text-gray-400 italic py-10">No active kitchen tickets.</p>
-                            )}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ── BENTO 4: Stock Inventory ── */}
-
-            {/* ── BENTO 4: Stock Inventory ── */}
-            {isWidgetVisible('stock_availability') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px]">
-                    <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                        <BookOpen className="w-4 h-4 text-[#C9974A]" /> Instant Menu Stock Availability
-                    </h3>
-                    <div className="space-y-2 max-h-[145px] overflow-y-auto pr-1">
-                        {menuItemsList.map(item => (
-                            <div key={item.id} className="flex justify-between items-center text-xs py-1 border-b border-[#C9974A]/10 last:border-b-0">
+            {/* WIDGET 4 — Menu Stock */}
+            {show("stock_availability") && (
+                <div className="md:col-span-4 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden flex flex-col min-h-[220px]">
+                    <CardHeader icon={Package} title="Instant Menu Stock" subtitle="Quick availability toggle"
+                        badge={outOfStockCount > 0 ? <Pill variant="red" pulse>{outOfStockCount} Out</Pill> : <Pill variant="green">All Stocked</Pill>}
+                    />
+                    <div className="p-2.5 border-b border-stone-100">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                            <input type="text" placeholder="Search menu items..." value={stockSearch} onChange={e => setStockSearch(e.target.value)} className="w-full pl-7 pr-2.5 py-1 text-[11px] bg-stone-50 border border-stone-200 rounded-md focus:outline-none focus:border-[#C9974A]" />
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto max-h-[145px] p-2.5 space-y-1 taj-scrollbar-dark">
+                        {filteredMenu.map((item: any) => (
+                            <div key={item.id} className="flex justify-between items-center text-xs py-1 border-b border-stone-50 last:border-0">
                                 <span className="font-semibold truncate max-w-[130px] flex items-center gap-1.5">
-                                    {item.name}
-                                    {item.stock_qty !== null && (
-                                        <span className="text-[9px] bg-amber-100 text-amber-850 border border-amber-200 px-1.5 py-0.5 rounded font-black">
-                                            Qty: {item.stock_qty}
-                                        </span>
-                                    )}
+                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.is_available ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                    <span className="truncate">{item.name}</span>
+                                    {item.stock_qty !== null && <span className="text-[8px] bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded font-bold">Qty:{item.stock_qty}</span>}
                                 </span>
-                                <button
-                                    onClick={() => handleToggleItemStock(item.id, item.is_available)}
-                                    className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase transition-all cursor-pointer
-                                    ${item.is_available ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}
-                                >
-                                    {item.is_available ? (item.stock_qty !== null ? 'Limited' : 'In Stock') : 'No Stock'}
+                                <button onClick={() => handleToggleItemStock(item.id, item.is_available)} className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase transition-all border ${item.is_available ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-700" : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-emerald-50 hover:text-emerald-700"}`}>
+                                    {item.is_available ? (item.stock_qty !== null ? "Limited" : "In Stock") : "Out"}
                                 </button>
                             </div>
                         ))}
@@ -366,146 +260,106 @@ export function BentoDashboard({
                 </div>
             )}
 
-
-
-            {/* ── BENTO 5: Staff Attendance Check-in ── */}
-            {isWidgetVisible('staff_attendance') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px]">
-                    <div className="space-y-3">
-                        <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                            <CalendarRange className="w-4 h-4 text-[#C9974A]" /> Staff Attendance Register
-                        </h3>
-                        <div className="space-y-3 text-xs">
-                            <div className="flex gap-2">
-                                <select
-                                    value={attendanceStaffId}
-                                    onChange={e => setAttendanceStaffId(e.target.value)}
-                                    className="flex-1 bg-[#F6EEDF]/40 border border-[#C9974A]/40 rounded-xl px-2 py-1.5 text-xs text-[#4E1414] focus:outline-none max-w-[130px] sm:max-w-none"
-                                >
-                                    {staffList.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name} ({s.is_active ? 'Active' : 'Offline'})</option>
-                                    ))}
-                                </select>
-                                <button
-                                    onClick={() => handleStaffAttendance('clock_in')}
-                                    className="bg-green-700 hover:bg-green-800 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px] cursor-pointer"
-                                >
-                                    In
-                                </button>
-                                <button
-                                    onClick={() => handleStaffAttendance('clock_out')}
-                                    className="bg-red-700 hover:bg-red-800 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px] cursor-pointer"
-                                >
-                                    Out
-                                </button>
-                            </div>
-
-                            {/* Attendance logs */}
-                            <div className="space-y-1 max-h-[85px] overflow-y-auto pr-1">
-                                {attendanceLogs.slice(0, 3).map(log => (
-                                    <div key={log.id} className="flex justify-between text-[9px] bg-gray-50 p-1 rounded border">
-                                        <span className="font-semibold truncate max-w-[60px]">{log.staff_name}</span>
-                                        <span>In: {new Date(log.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                        <span className="text-gray-400">
-                                            {log.clock_out ? `Out: ${new Date(log.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Active'}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
+            {/* WIDGET 5 — Staff Attendance */}
+            {show("staff_attendance") && (
+                <div className="md:col-span-4 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden flex flex-col min-h-[220px]">
+                    <CardHeader icon={CalendarRange} title="Staff Attendance" subtitle="Clock in / clock out register"
+                        badge={<Pill variant={onShift > 0 ? "green" : "default"}>{onShift} On Shift</Pill>}
+                    />
+                    <div className="p-2.5 space-y-2 text-xs flex-1">
+                        <div className="flex gap-1.5">
+                            <select value={attendanceStaffId} onChange={e => setAttendanceStaffId(e.target.value)} className="flex-1 bg-stone-50 border border-stone-200 rounded-md px-2 py-1 text-xs text-[#4E1414] focus:outline-none truncate">
+                                {staffList.map((st: any) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                            </select>
+                            <button onClick={() => handleStaffAttendance("clock_in")} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2 py-1 rounded text-[9px] cursor-pointer">In</button>
+                            <button onClick={() => handleStaffAttendance("clock_out")} className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2 py-1 rounded text-[9px] cursor-pointer">Out</button>
+                        </div>
+                        <div className="space-y-1 max-h-[85px] overflow-y-auto pr-0.5">
+                            {attendanceLogs.slice(0,3).map((log: any) => (
+                                <div key={log.id} className="flex justify-between text-[9px] bg-stone-50 p-1 rounded border border-stone-100">
+                                    <span className="font-bold truncate max-w-[60px]">{log.staff_name}</span>
+                                    <span className="text-gray-500">In: {new Date(log.clock_in).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span>
+                                    <span className={log.clock_out ? "text-gray-400" : "text-emerald-700 font-bold"}>{log.clock_out ? `Out: ${new Date(log.clock_out).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}` : "Active"}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ── BENTO 6: Trending Dish Insights ── */}
-            {/* ── BENTO 6: Trending Dish Insights ── */}
-            {isWidgetVisible('trending_dish') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-4 space-y-3 flex flex-col justify-between min-h-[220px] relative overflow-hidden group">
-                    <div className="absolute right-0 bottom-0 opacity-5 transform translate-x-2 translate-y-2 pointer-events-none group-hover:scale-110 duration-500">
-                        <Flame className="w-36 h-36" />
+            {/* WIDGET 6 — Trending Dishes */}
+            {show("trending_dish") && (
+                <div className="md:col-span-4 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden flex flex-col min-h-[220px] relative">
+                    <CardHeader icon={Flame} title="Popular Trending" subtitle="Shift bestseller insights"
+                        badge={topItems.length > 0 ? <Pill variant="orange">Hot Item</Pill> : <Pill>No Sales</Pill>}
+                    />
+                    <div className="p-3 flex-1 flex flex-col justify-between">
+                        {topItems.length === 0 ? (
+                            <p className="text-xs text-gray-400 italic text-center py-6">No portion sales recorded yet this shift.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {topItems.map((item, idx) => {
+                                    const pct = Math.round((item.qty / maxQty) * 100);
+                                    return (
+                                        <div key={item.name} className="space-y-0.5">
+                                            <div className="flex justify-between text-[11px]">
+                                                <span className="font-bold text-[#4E1414] truncate flex items-center gap-1">
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                                    {item.name}
+                                                </span>
+                                                <span className="font-bold text-[#C9974A] text-[10px]">{item.qty} sold</span>
+                                            </div>
+                                            <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-[#C9974A] rounded-full" style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <div className="bg-stone-50 border border-stone-100 rounded-md p-1.5 text-[9px] text-gray-500 font-medium">
+                            💡 Highest grossing dish appears automatically on settle.
+                        </div>
                     </div>
+                </div>
+            )}
 
-                    <div className="space-y-3">
-                        <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                            <Flame className="w-4 h-4 text-orange-500 animate-pulse" /> Popular Trending Dish
-                        </h3>
-
-                        {trendingItem ? (
-                            <div className="pt-2 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${trendingItem.isVeg ? 'bg-green-600' : 'bg-red-600'}`} title={trendingItem.isVeg ? 'Veg' : 'Non-Veg'} />
-                                    <span className="text-sm font-black text-[#4E1414] leading-tight line-clamp-2">{trendingItem.name}</span>
+            {/* WIDGET 7 — Cash Register */}
+            {show("cash_register") && (
+                <div className="md:col-span-12 bg-white rounded-xl shadow-2xs border border-stone-200/80 overflow-hidden">
+                    <CardHeader icon={Activity} title="Cash Drawer Register Session" subtitle="Float balancing & drawer session"
+                        badge={isRegisterOpen ? <Pill variant="green">Register Open</Pill> : <Pill variant="red">Register Closed</Pill>}
+                    />
+                    <div className="p-3.5">
+                        {isRegisterOpen ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                                <div className="bg-stone-50 border border-stone-100 p-2.5 rounded-lg">
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Opening Float</span>
+                                    <p className="text-sm font-black text-[#4E1414] mt-0.5">{fmt(openingFloat)}</p>
                                 </div>
-                                <p className="text-xs text-gray-500 font-medium">Portions Sold: <span className="font-bold text-[#C9974A] text-sm">{trendingItem.qty} orders</span></p>
+                                <div className="bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-lg">
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase">Cash Sales</span>
+                                    <p className="text-sm font-black text-emerald-700 mt-0.5">{fmt(dayStats.cashSales)}</p>
+                                </div>
+                                <div className="bg-sky-50/60 border border-sky-100 p-2.5 rounded-lg">
+                                    <span className="text-[9px] font-bold text-sky-600 uppercase">Expected Drawer</span>
+                                    <p className="text-sm font-black text-sky-700 mt-0.5">{fmt(expectedCash)}</p>
+                                </div>
+                                <button onClick={() => handleSidebarAction("Drawer Session", "view_billing")} className="bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+                                    <Activity className="w-3.5 h-3.5 text-[#C9974A]" /> Drawer Balancing
+                                </button>
                             </div>
                         ) : (
-                            <div className="pt-2">
-                                <p className="text-xs text-gray-400 italic">No portion sales recorded yet this shift.</p>
+                            <div className="flex items-center gap-3 flex-wrap text-xs">
+                                <label className="font-bold text-gray-600">Opening Float (₹):</label>
+                                <input type="number" value={newFloat} onChange={e => setNewFloat(Number(e.target.value))} min={0} className="w-28 border border-stone-200 rounded-md px-2.5 py-1 font-bold focus:outline-none focus:border-[#C9974A]" />
+                                <button onClick={() => handleOpenSession(newFloat)} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-1.5 rounded-md text-xs cursor-pointer">
+                                    ✓ Open Session
+                                </button>
+                                <span className="text-[10px] text-gray-400 italic">Open register to track float balancing.</span>
                             </div>
                         )}
                     </div>
-
-                    <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/25 rounded-xl p-2.5 text-[10px] text-gray-600 font-semibold z-10">
-                        {trendingItem
-                            ? '🔥 This signature recipe is currently the highest grossing dish of the shift!'
-                            : '💡 Once orders are settled, the highest selling item will appear here.'}
-                    </div>
-                </div>
-            )}
-
-            {/* ── BENTO 7: Daily Register Session Drawer ── */}
-            {isWidgetVisible('cash_register') && (
-                <div className="bg-white border border-[#C9974A]/30 p-5 rounded-3xl shadow-sm md:col-span-12 space-y-4">
-                    <div className="flex justify-between items-center pb-2 border-b border-[#C9974A]/10">
-                        <h3 className="font-bold text-xs uppercase tracking-wider text-[#C9974A] flex items-center gap-1.5">
-                            <Activity className="w-4 h-4 text-[#C9974A]" /> Cash Drawer Register Session
-                        </h3>
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${isRegisterOpen ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'
-                            }`}>STATUS: {isRegisterOpen ? '✓ OPEN' : '✗ CLOSED'}</span>
-                    </div>
-
-                    {isRegisterOpen ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                            <div>
-                                <span className="text-[9px] font-bold text-gray-400 uppercase">Opening Float</span>
-                                <p className="text-sm font-black mt-0.5">{fmt(openingFloat)}</p>
-                            </div>
-                            <div>
-                                <span className="text-[9px] font-bold text-gray-400 uppercase">Cash Sales</span>
-                                <p className="text-sm font-black mt-0.5 text-green-700">{fmt(dayStats.cashSales)}</p>
-                            </div>
-                            <div>
-                                <span className="text-[9px] font-bold text-gray-400 uppercase">Expected Drawer</span>
-                                <p className="text-sm font-black mt-0.5 text-green-700">{fmt(expectedCash)}</p>
-                            </div>
-                            <button
-                                onClick={() => handleSidebarAction('Drawer Session', 'view_billing')}
-                                className="bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold px-3 py-1.5 rounded-lg text-[10px] transition-colors cursor-pointer"
-                            >
-                                Drawer Balancing Settings
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 flex-1">
-                                <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Opening Float (₹):</label>
-                                <input
-                                    type="number"
-                                    value={newFloat}
-                                    onChange={e => setNewFloat(Number(e.target.value))}
-                                    min={0}
-                                    className="flex-1 border border-[#C9974A]/40 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#C9974A]/40"
-                                />
-                            </div>
-                            <button
-                                onClick={() => handleOpenSession(newFloat)}
-                                className="bg-green-700 hover:bg-green-800 text-white font-bold px-4 py-2 rounded-lg text-xs transition-colors whitespace-nowrap cursor-pointer"
-                            >
-                                ✓ Open Register Session
-                            </button>
-                            <p className="text-[10px] text-gray-400 italic">Register is closed — open it to track cash drawer balance.</p>
-                        </div>
-                    )}
                 </div>
             )}
         </div>

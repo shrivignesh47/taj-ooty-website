@@ -1,7 +1,7 @@
 "use server";
 
 import { verifyStaff } from './auth';
-import { admin } from '@/lib/supabaseAdmin';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { StaffRole, getDefaultPreferences, WIDGET_CATALOG } from '../config/widgetCatalog';
 import { revalidatePath } from 'next/cache';
 
@@ -12,7 +12,7 @@ export async function getDashboardPreferences(role: StaffRole) {
     }
 
     try {
-        const { data, error } = await admin
+        const { data, error } = await supabaseAdmin
             .from('dashboard_preferences')
             .select('visible_widgets, widget_order')
             .eq('staff_id', auth.user.id)
@@ -57,7 +57,7 @@ export async function saveDashboardPreferences(visibleWidgets: string[], widgetO
     }
 
     try {
-        const { error } = await admin
+        const { error } = await supabaseAdmin
             .from('dashboard_preferences')
             .upsert({
                 staff_id: auth.user.id,

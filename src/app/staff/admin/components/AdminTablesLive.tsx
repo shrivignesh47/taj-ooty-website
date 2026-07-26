@@ -243,44 +243,46 @@ export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesL
     const needsBill = tables.filter(t => t.status === 'Needs Bill').length;
 
     return (
-        <div className="space-y-6">
-            {/* Summary bar */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Total Tables', value: tables.length, color: 'text-[#4E1414]' },
-                    { label: 'Occupied', value: occupied, color: 'text-[#C9974A]' },
-                    { label: 'Needs Bill', value: needsBill, color: 'text-blue-700' },
-                    { label: 'Empty', value: tables.length - occupied - needsBill, color: 'text-green-700' },
-                ].map(s => (
-                    <div key={s.label} className="bg-white rounded-2xl border border-[#C9974A]/20 p-5 flex flex-col items-center">
-                        <span className={`text-4xl font-black ${s.color}`}>{s.value}</span>
-                        <span className="text-xs font-bold text-[#241B15]/50 uppercase tracking-wider mt-1">{s.label}</span>
-                    </div>
-                ))}
-            </div>
-
-            {/* Add table */}
+        <div className="space-y-3">
+            {/* Summary bar - shown only in full management mode */}
             {!readOnly && (
-                <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-[#C9974A]/20 shadow-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                        { label: 'Total Tables', value: tables.length, color: 'text-[#4E1414]' },
+                        { label: 'Occupied', value: occupied, color: 'text-[#C9974A]' },
+                        { label: 'Needs Bill', value: needsBill, color: 'text-blue-700' },
+                        { label: 'Empty', value: tables.length - occupied - needsBill, color: 'text-green-700' },
+                    ].map(s => (
+                        <div key={s.label} className="bg-white rounded-xl border border-[#C9974A]/20 p-3 flex flex-col items-center">
+                            <span className={`text-2xl font-black ${s.color}`}>{s.value}</span>
+                            <span className="text-[10px] font-bold text-[#241B15]/50 uppercase tracking-wider mt-0.5">{s.label}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Add table & Bulk actions bar */}
+            {!readOnly && (
+                <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-[#C9974A]/20 shadow-xs">
                     <div>
-                        <h3 className="text-[#4E1414] font-black text-lg">Table Overview</h3>
-                        <p className="text-[#241B15]/60 text-sm mt-1">Manage physical tables and QR codes.</p>
+                        <h3 className="text-[#4E1414] font-bold text-sm">Table Overview</h3>
+                        <p className="text-[#241B15]/60 text-xs">Manage physical tables and QR codes.</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={handleDownloadAllQRs}
                             disabled={creating || tables.length === 0}
-                            className="flex items-center gap-2 bg-[#F6EEDF] border border-[#C9974A]/40 text-[#4E1414] px-4 py-2 rounded-xl font-bold hover:bg-[#e6dbcc] transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 bg-[#F6EEDF] border border-[#C9974A]/40 text-[#4E1414] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#e6dbcc] transition-colors disabled:opacity-50"
                         >
-                            <Download className="w-4 h-4" />
+                            <Download className="w-3.5 h-3.5" />
                             {creating ? 'Zipping...' : 'Bulk Zip QRs'}
                         </button>
                         <button
                             onClick={handleAddTable}
                             disabled={creating}
-                            className="flex items-center gap-2 bg-[#4E1414] text-[#F6EEDF] px-5 py-2 rounded-xl font-bold shadow hover:bg-[#350C0C] transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 bg-[#4E1414] text-[#F6EEDF] px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs hover:bg-[#350C0C] transition-colors disabled:opacity-50"
                         >
-                            <Plus className="w-4 h-4 text-[#C9974A]" />
+                            <Plus className="w-3.5 h-3.5 text-[#C9974A]" />
                             Add New Table
                         </button>
                     </div>
@@ -288,13 +290,13 @@ export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesL
             )}
 
             {/* Table grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">
                 {tables.map(t => {
                     const sc = STATUS_COLORS[t.status];
                     return (
                         <div
                             key={t.id}
-                            className={`bg-white rounded-2xl border-2 ${sc.card} p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
+                            className={`bg-white rounded-xl border ${sc.card} p-3 flex flex-col justify-between gap-1.5 shadow-2xs hover:shadow-sm hover:border-[#C9974A] transition-all cursor-pointer`}
                             onClick={() => {
                                 if (onTableClick) {
                                     onTableClick(t);
@@ -304,39 +306,38 @@ export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesL
                             }}
                         >
                             <div className="flex justify-between items-center">
-                                <span className="text-2xl font-black text-[#4E1414]">T-{t.table_no}</span>
-                                <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${sc.badge}`}>
+                                <span className="text-base font-black text-[#4E1414]">T-{t.table_no}</span>
+                                <span className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full ${sc.badge}`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
                                     {t.status}
                                 </span>
                             </div>
 
-                            <div className="text-xs text-[#241B15]/60 flex items-center gap-1.5">
-                                <UserCheck className="w-3.5 h-3.5 text-[#C9974A]" />
-                                {t.waiter_name ?? <span className="italic">No waiter assigned</span>}
+                            <div className="text-[10px] text-gray-500 flex items-center gap-1 truncate">
+                                <UserCheck className="w-3 h-3 text-[#C9974A] shrink-0" />
+                                <span className="truncate">{t.waiter_name ?? 'No waiter'}</span>
                             </div>
 
                             {t.status !== 'Empty' && (
-                                <div className="border-t border-[#F6EEDF] pt-3 space-y-1">
-                                    <p className="text-xs font-bold text-[#241B15]">{t.customer_name}</p>
-                                    <p className="text-xs text-[#241B15]/50">{t.customer_phone}</p>
-                                    <p className="font-black text-[#C9974A] text-base">₹{t.currentBill.toFixed(2)}</p>
+                                <div className="border-t border-gray-100 pt-1.5 space-y-0.5">
+                                    <p className="text-[10px] font-bold text-[#4E1414] truncate">{t.customer_name || 'Guest'}</p>
+                                    <p className="font-black text-[#C9974A] text-xs">₹{t.currentBill.toFixed(2)}</p>
                                 </div>
                             )}
 
                             {!readOnly && (
-                                <div className="flex gap-2 mt-auto pt-2 border-t border-[#F6EEDF]" onClick={e => e.stopPropagation()}>
+                                <div className="flex gap-1.5 mt-1 pt-1.5 border-t border-gray-100" onClick={e => e.stopPropagation()}>
                                     <button
                                         onClick={() => setShowQR(t)}
-                                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-3 bg-[#F6EEDF] text-[#4E1414] rounded-lg hover:bg-[#e4d7be] transition-colors"
+                                        className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1 px-2 bg-[#F6EEDF] text-[#4E1414] rounded-md hover:bg-[#e4d7be] transition-colors"
                                     >
-                                        <QrCode className="w-3.5 h-3.5" /> QR Code
+                                        <QrCode className="w-3 h-3" /> QR
                                     </button>
                                     <button
                                         onClick={() => setConfirmDelete(t.id)}
-                                        className="flex items-center justify-center p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors outline outline-1 outline-red-200"
+                                        className="flex items-center justify-center p-1 text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors border border-red-200"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="w-3 h-3" />
                                     </button>
                                 </div>
                             )}
@@ -344,6 +345,7 @@ export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesL
                     );
                 })}
             </div>
+
 
             {/* Detail modal (customer info) */}
             {selected && (
