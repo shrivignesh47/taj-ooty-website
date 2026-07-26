@@ -4,22 +4,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/features/ordering/lib/supabase';
 import { orderTotal } from '../components/utils';
 import {
-    settleBillWithPayment, openRegisterSession, closeRegisterSession,
+    settleBillWithPayment, settleBillWithSplitPayment, openRegisterSession, closeRegisterSession,
     getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown
 } from '@/features/ordering/actions/billingActions';
 import { getDashboardPreferences } from '@/features/ordering/actions/dashboardPrefActions';
 import { normalizeStaffRole } from '@/features/ordering/config/widgetCatalog';
+import { validateAndApplyCoupon } from '@/features/ordering/actions/couponActions';
 import {
     TableView, CashierOrder, GuestRecord, StaffUser, AttendanceLog,
     MainView, PayMethod, DayStats, PettyCashEntry
 } from '../types';
-
-export const PRESET_COUPONS = [
-    { code: 'TAJ10', type: 'pct', value: 10, description: '10% Restaurant Special' },
-    { code: 'WELCOME50', type: 'amt', value: 50, description: '₹50 Flat Welcome Discount' },
-    { code: 'FESTIVE15', type: 'pct', value: 15, description: '15% Festive Occasion Discount' },
-    { code: 'VIP200', type: 'amt', value: 200, description: '₹200 Flat VIP Discount' }
-];
+import { printThermalReceipt } from '@/features/ordering/lib/thermalPrint';
+import { buildReceiptCommands } from '@/features/ordering/lib/escpos';
+import {
+    getLoyaltyBalance, earnLoyaltyPoints, redeemLoyaltyPoints, CustomerLoyaltyData
+} from '@/features/ordering/actions/loyaltyActions';
 
 export function useBillingState(activeUser: any) {
     const [view, setView] = useState<MainView>('bento');
@@ -33,17 +32,19 @@ export function useBillingState(activeUser: any) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Dynamic Permission & Role state overrides to reflect updates instantly
+    // Dynamic Permission & Role state overrides
     const [currentPermissions, setCurrentPermissions] = useState<string[]>(activeUser.permissions || []);
     const [currentRoleName, setCurrentRoleName] = useState<string>(activeUser.roleName || 'Cashier');
 
     // Sidebar selected table
     const [selectedTable, setSelectedTable] = useState<TableView | null>(null);
 
-    // Bill adjustments state
+    // Discount state
     const [discountType, setDiscountType] = useState<'amt' | 'pct'>('amt');
     const [discountValue, setDiscountValue] = useState<number>(0);
     const [appliedCoupon, setAppliedCoupon] = useState<string>('');
+
+    // Payment state
     const [paymentMethod, setPaymentMethod] = useState<PayMethod>('cash');
     const [submittingPayment, setSubmittingPayment] = useState(false);
     const [billPrinted, setBillPrinted] = useState(false);
@@ -51,6 +52,31 @@ export function useBillingState(activeUser: any) {
     // Split Billing State
     const [isSplitEnabled, setIsSplitEnabled] = useState(false);
     const [splitGuests, setSplitGuests] = useState(2);
+
+    // Multi-Tender Payment Breakdown State
+    const [isMultiTenderEnabled, setIsMultiTenderEnabled] = useState(false);
+    const [multiTenderRows, setMultiTenderRows] = useState<{ method: 'cash' | 'card' | 'upi'; amount: number }[]>([
+        { method: 'cash', amount: 0 },
+        { method: 'upi', amount: 0 }
+    ]);
+
+    // Loyalty Program State
+    const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
+    const [customerLoyalty, setCustomerLoyalty] = useState<CustomerLoyaltyData | null>(null);
+    const [loyaltyToast, setLoyaltyToast] = useState<string | null>(null);
+
+    const fetchLoyaltyInfo = async (phone: string) => {
+        if (!phone || phone.trim().length < 6) {
+            setCustomerLoyalty(null);
+            return;
+        }
+        const res = await getLoyaltyBalance(phone);
+        if (res.success && res.loyalty) {
+            setCustomerLoyalty(res.loyalty);
+        } else {
+            setCustomerLoyalty(null);
+        }
+    };
 
     // Day stats & registers
     const [dayStats, setDayStats] = useState<DayStats>({
@@ -71,153 +97,119 @@ export function useBillingState(activeUser: any) {
     const [newExpensePurpose, setNewExpensePurpose] = useState('');
     const [newExpenseAmount, setNewExpenseAmount] = useState<number>(0);
 
-    // Takeaway Orders (Not tied to table)
+    // Aggregators & drawers
     const [takeawayOrders, setTakeawayOrders] = useState<CashierOrder[]>([]);
     const [onlineOrders, setOnlineOrders] = useState<CashierOrder[]>([]);
     const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
-
-    // Sliding Sidebar state
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-    // POS & GST settings
     const [settings, setSettings] = useState({
         printerSize: '80mm',
-        autoPrint: true,
-        chargeServiceTax: false,
-        serviceChargeRate: 0,
+        autoPrint: false,
         gstRate: 5,
+        serviceChargeRate: 5,
+        headerNote: 'HOTEL TAJ OOTY',
+        footerNote: 'Thank you! Visit again.',
         isGstInclusive: false,
-        headerNote: 'Hotel Taj Ooty',
-        footerNote: 'Thank You! Please Visit Again.'
+        chargeServiceTax: true,
     });
 
-    // Modal control for overlays
     const [activeOpModal, setActiveOpModal] = useState<string | null>(null);
     const [deniedPermission, setDeniedPermission] = useState<string | null>(null);
     const [selectedReport, setSelectedReport] = useState<string>('Sales Summary');
-
-    // Attendance form state
-    const [attendanceStaffId, setAttendanceStaffId] = useState('');
-
-    // Staff Roster Management State
+    const [attendanceStaffId, setAttendanceStaffId] = useState<string>('');
     const [rolesList, setRolesList] = useState<any[]>([]);
 
-    // Customizable Dashboard State
+    // Dashboard Personalization widgets
     const [userVisibleWidgets, setUserVisibleWidgets] = useState<string[]>([]);
     const [userWidgetOrder, setUserWidgetOrder] = useState<string[]>([]);
     const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+    const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
 
-    const hasPerm = (requiredPerm: string) => {
-        if (currentRoleName?.toLowerCase() === 'admin') return true;
-        return currentPermissions.includes(requiredPerm);
-    };
-
-    const canApplyDiscount = hasPerm('edit_menu') || hasPerm('generate_bills');
+    // Helper: check permission dynamically against current permissions state
+    const hasPerm = (permKey: string) => currentPermissions.includes(permKey);
+    const canApplyDiscount = hasPerm('apply_discount');
     const canSettleBills = hasPerm('generate_bills');
 
+    // ─── Orders, Tables & Menu fetch ──────────────────────────────────────────
     const loadData = useCallback(async () => {
-        const [tablesRes, activeRes, historyRes, menuItemsRes, staffRes, attendanceRes, rolesRes, settingsRes] = await Promise.all([
-            supabase.from('restaurant_tables').select('id, table_no, assigned_waiter_id').order('table_no'),
-            supabase.from('orders')
-                .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                    restaurant_tables(id, table_no),
-                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(name, is_veg, id))`)
-                .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served'])
-                .order('created_at', { ascending: true }),
-            supabase.from('orders')
-                .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                    restaurant_tables(id, table_no),
-                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(name, is_veg, id))`)
-                .eq('status', 'billed')
-                .order('created_at', { ascending: false })
-                .limit(100),
-            supabase.from('menu_items').select('*, categories(id, name)').order('name'),
+        setRefreshing(true);
+
+        const [
+            { data: rawTables },
+            { data: rawOrders },
+            { data: rawHistory },
+            { data: rawMenu },
+            { data: rawStaff },
+            { data: rawAttendance },
+            { data: rawSettings },
+            { data: rawRoles }
+        ] = await Promise.all([
+            supabase.from('restaurant_tables').select('*').order('table_no'),
+            supabase.from('orders').select(`
+                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                restaurant_tables(table_no, id),
+                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+            `).in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']).order('created_at', { ascending: false }),
+            supabase.from('orders').select(`
+                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                restaurant_tables(table_no, id),
+                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+            `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
+            supabase.from('menu_items').select('*').order('name'),
             supabase.from('staff_users').select('*, roles(name)').order('name'),
-            supabase.from('staff_attendance').select('id, staff_id, clock_in, clock_out, staff_users(name)').order('clock_in', { ascending: false }).limit(20),
-            supabase.from('roles').select('id, name').order('name'),
-            supabase.from('restaurant_settings').select('*').limit(1).maybeSingle()
+            supabase.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
+            supabase.from('restaurant_settings').select('*').limit(1).single(),
+            supabase.from('roles').select('*, role_permissions(permissions(key))')
         ]);
 
-        // Realtime dynamic permissions fetch
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const { data: staffMember } = await supabase
-                .from('staff_users')
-                .select(`
-                    id,
-                    roles (
-                        name,
-                        role_permissions (
-                            permissions (
-                                key
-                            )
-                        )
-                    )
-                `)
-                .eq('auth_id', user.id)
-                .single();
-
-            if (staffMember) {
-                const roleData: any = staffMember.roles;
-                const perms = new Set<string>();
-                if (roleData?.role_permissions) {
-                    roleData.role_permissions.forEach((rp: any) => {
-                        if (!rp.permissions) return;
-                        if (Array.isArray(rp.permissions)) {
-                            rp.permissions.forEach((p: any) => {
-                                if (p?.key) perms.add(p.key);
-                            });
-                        } else if (rp.permissions?.key) {
-                            perms.add(rp.permissions.key);
-                        }
-                    });
+        if (rawRoles) {
+            setRolesList(rawRoles);
+            const myUser = rawStaff?.find((u: any) => u.id === activeUser.id || u.auth_id === activeUser.id);
+            if (myUser && myUser.roles?.name) {
+                setCurrentRoleName(myUser.roles.name);
+                const myRoleObj = rawRoles.find((r: any) => r.id === myUser.role_id);
+                if (myRoleObj && myRoleObj.role_permissions) {
+                    const freshKeys = myRoleObj.role_permissions
+                        .map((rp: any) => rp.permissions?.key)
+                        .filter(Boolean);
+                    setCurrentPermissions(freshKeys);
                 }
-                if (roleData?.name?.toLowerCase() === 'admin') {
-                    const { data: allPerms } = await supabase.from('permissions').select('key');
-                    allPerms?.forEach(p => perms.add(p.key));
-                }
-                setCurrentPermissions(Array.from(perms));
-                setCurrentRoleName(roleData?.name || 'Cashier');
             }
         }
 
-        if (settingsRes && settingsRes.data) {
-            setRestaurantSettings(settingsRes.data);
+        if (rawSettings) {
+            setRestaurantSettings(rawSettings);
+            setSettings(prev => ({
+                ...prev,
+                gstRate: rawSettings.gst_rate ?? 5,
+                serviceChargeRate: rawSettings.service_charge_rate ?? 5,
+                isGstInclusive: rawSettings.is_gst_inclusive ?? false,
+                chargeServiceTax: rawSettings.charge_service_tax ?? true,
+                headerNote: rawSettings.restaurant_name ?? 'HOTEL TAJ OOTY',
+            }));
         }
 
-        const rawTables = tablesRes.data ?? [];
-        const rawOrders = (activeRes.data ?? []) as unknown as CashierOrder[];
-        const rawHistory = (historyRes.data ?? []) as unknown as CashierOrder[];
+        if (rawMenu) setMenuItemsList(rawMenu as any[]);
+        if (rawStaff) setStaffList(rawStaff as any[]);
 
-        if (menuItemsRes.data) setMenuItemsList(menuItemsRes.data);
-        if (rolesRes.data) setRolesList(rolesRes.data);
-        if (staffRes.data) {
-            setStaffList(staffRes.data);
-            if (staffRes.data.length > 0 && !attendanceStaffId) {
-                setAttendanceStaffId(staffRes.data[0].id);
-            }
-        }
-        if (attendanceRes.data) {
-            const mappedAttendance: AttendanceLog[] = (attendanceRes.data as any[]).map((a: any) => ({
+        if (rawAttendance) {
+            const mappedLog: AttendanceLog[] = (rawAttendance as any[]).map(a => ({
                 id: a.id,
                 staff_id: a.staff_id,
                 clock_in: a.clock_in,
                 clock_out: a.clock_out,
-                staff_name: a.staff_users?.name ?? 'Unknown Staff'
+                staff_name: a.staff_users?.name || 'Staff'
             }));
-            setAttendanceLogs(mappedAttendance);
+            setAttendanceLogs(mappedLog);
+            if (!attendanceStaffId && rawStaff && rawStaff.length > 0) {
+                setAttendanceStaffId(rawStaff[0].id);
+            }
         }
 
-        const activeDineIn = rawOrders.filter(o => (o.source === 'dine_in' || !o.source) && o.table_id !== null);
-        const activeTakeaway = rawOrders.filter(o => o.source === 'takeaway' || (!o.source && o.table_id === null));
-        const activeOnline = rawOrders.filter(o => o.source === 'swiggy' || o.source === 'zomato');
-        setTakeawayOrders(activeTakeaway);
-        setOnlineOrders(activeOnline);
-        setActiveOrders(rawOrders);
-
-        const enriched: TableView[] = rawTables.map((t: any) => {
-            const tOrders = activeDineIn.filter(o => o.table_id === t.id);
+        const enriched: TableView[] = (rawTables || []).map(t => {
+            const tOrders = (rawOrders || []).filter(o => o.table_id === t.id) as unknown as CashierOrder[];
             const bill = tOrders.reduce((s, o) => s + orderTotal(o), 0);
 
             let status: TableView['status'] = 'Empty';
@@ -237,17 +229,17 @@ export function useBillingState(activeUser: any) {
         });
 
         const today = new Date();
-        const todayBills = rawHistory.filter(o => {
+        const todayBills = (rawHistory || []).filter(o => {
             const d = new Date(o.created_at);
             return d.toDateString() === today.toDateString();
         });
 
         const guestMap = new Map<string, { name: string; phone: string; totalVisits: number; totalSpent: number; lastVisit: string }>();
-        const aggregateOrders = [...rawOrders, ...rawHistory];
+        const aggregateOrders = [...(rawOrders || []), ...(rawHistory || [])];
         aggregateOrders.forEach(o => {
             if (o.customer_phone) {
                 const existing = guestMap.get(o.customer_phone);
-                const sub = o.order_items.reduce((s, i) => s + i.price_at_order * i.qty, 0) * 1.15;
+                const sub = (o.order_items || []).reduce((s: number, i: any) => s + i.price_at_order * i.qty, 0) * 1.15;
                 if (existing) {
                     existing.totalVisits += 1;
                     existing.totalSpent += sub;
@@ -268,7 +260,7 @@ export function useBillingState(activeUser: any) {
         setGuests(Array.from(guestMap.values()));
 
         const rev = todayBills.reduce((s, o) => {
-            const sub = orderTotal(o);
+            const sub = orderTotal(o as unknown as CashierOrder);
             if (settings.isGstInclusive) {
                 const service = settings.chargeServiceTax ? (sub / (1 + (settings.gstRate / 100))) * (settings.serviceChargeRate / 100) : 0;
                 return s + sub + service;
@@ -280,22 +272,20 @@ export function useBillingState(activeUser: any) {
         }, 0);
 
         setTables(enriched);
-        setActiveOrders(rawOrders);
-        setHistory(rawHistory);
+        setActiveOrders(rawOrders as any[]);
+        setHistory(rawHistory as any[]);
         setDayStats(prev => ({
             revenue: rev, bills: todayBills.length,
             avgBill: todayBills.length ? rev / todayBills.length : 0,
             activeTables: enriched.filter(t => t.status !== 'Empty').length,
-            // Keep payment split from last loadShiftData — don't re-query on every realtime event
             cashSales: prev.cashSales, cardSales: prev.cardSales, upiSales: prev.upiSales
         }));
 
-
         if (selectedTable) {
             if (selectedTable.table_no === 0) {
-                const currentOrder = rawOrders.find(o => o.id === selectedTable.id);
+                const currentOrder = (rawOrders || []).find(o => o.id === selectedTable.id);
                 if (currentOrder) {
-                    const total = orderTotal(currentOrder);
+                    const total = orderTotal(currentOrder as any);
                     setSelectedTable({
                         id: currentOrder.id,
                         table_no: 0,
@@ -303,7 +293,7 @@ export function useBillingState(activeUser: any) {
                         currentBill: total,
                         customer_name: currentOrder.customer_name,
                         customer_phone: currentOrder.customer_phone ?? undefined,
-                        orders: [currentOrder],
+                        orders: [currentOrder as any],
                         latestStatus: currentOrder.status
                     });
                 } else {
@@ -323,9 +313,6 @@ export function useBillingState(activeUser: any) {
         setRefreshing(false);
     }, [selectedTable, openingFloat, expenses, settings.gstRate, settings.isGstInclusive, settings.chargeServiceTax, settings.serviceChargeRate, attendanceStaffId, activeUser.id]);
 
-    // ─── Shift-level data: payment breakdown + register session ──────────────
-    // Called ONCE on mount and after bill settlement / register open/close.
-    // NOT called on every realtime order event (avoids server action spam).
     const loadShiftData = useCallback(async () => {
         const [payBreakdown, { session }] = await Promise.all([
             getTodayPaymentBreakdown(),
@@ -367,11 +354,9 @@ export function useBillingState(activeUser: any) {
     }, [loadData]);
 
     useEffect(() => {
-        // Initial load: both orders data AND shift-level data
         loadDataRef.current();
         loadShiftData();
 
-        // Realtime: only refresh orders/tables/menu — NOT payment or register session
         const ch = supabase.channel('cashier-petpooja-v4-realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadDataRef.current())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadDataRef.current())
@@ -401,6 +386,10 @@ export function useBillingState(activeUser: any) {
         setAppliedCoupon('');
         setIsSplitEnabled(false);
         setBillPrinted(false);
+        setPointsToRedeem(0);
+        const phone = t.customer_phone || t.orders?.[0]?.customer_phone;
+        if (phone) fetchLoyaltyInfo(phone);
+        else setCustomerLoyalty(null);
     };
 
     const getCheckoutCalculation = (t: TableView) => {
@@ -423,52 +412,99 @@ export function useBillingState(activeUser: any) {
         });
 
         const subtotal = allItems.reduce((s, i) => s + i.effectivePrice * i.qty, 0);
-        const discountAmt = discountType === 'amt'
+        const promoDiscount = discountType === 'amt'
             ? Math.min(discountValue, subtotal)
             : Math.min((subtotal * discountValue) / 100, subtotal);
 
-        const taxableAmount = subtotal - discountAmt;
+        const redemptionRate = Number(restaurantSettings?.loyalty_redemption_rate) || 0.5;
+        const loyaltyDiscount = Math.min(pointsToRedeem * redemptionRate, Math.max(0, subtotal - promoDiscount));
+        const discountAmt = promoDiscount + loyaltyDiscount;
 
-        let cgst = 0, sgst = 0, service = 0, grand = 0;
-        const splitRate = settings.gstRate / 2;
+        const taxableAmount = subtotal - discountAmt;
         const serviceChargeRate = settings.chargeServiceTax
             ? (settings.serviceChargeRate ?? 0) / 100
             : 0;
-        service = subtotal * serviceChargeRate;
+        const service = taxableAmount * serviceChargeRate;
+        const gstBase = taxableAmount + service;
+
+        let cgst = 0, sgst = 0, grand = 0;
+        const gstRate = (settings.gstRate ?? 5) / 100;
 
         if (settings.isGstInclusive) {
-            const baseAmount = taxableAmount / (1 + (settings.gstRate / 100));
-            const totalGst = taxableAmount - baseAmount;
+            grand = gstBase;
+            const baseBeforeGst = gstBase / (1 + gstRate);
+            const totalGst = gstBase - baseBeforeGst;
             cgst = totalGst / 2;
             sgst = totalGst / 2;
-            grand = taxableAmount + service;
         } else {
-            cgst = taxableAmount * (splitRate / 100);
-            sgst = taxableAmount * (splitRate / 100);
-            grand = taxableAmount + cgst + sgst + service;
+            cgst = (gstBase * gstRate) / 2;
+            sgst = (gstBase * gstRate) / 2;
+            grand = gstBase + cgst + sgst;
         }
 
-        return { allItems, subtotal, discountAmt, taxableAmount, cgst, sgst, service, grand };
+        return { allItems, subtotal, discountAmt, promoDiscount, loyaltyDiscount, taxableAmount, service, gstBase, cgst, sgst, grand };
     };
 
-    const handleApplyCoupon = (code: string) => {
-        const coupon = PRESET_COUPONS.find(c => c.code === code);
-        if (coupon) {
-            setAppliedCoupon(code);
-            setDiscountType(coupon.type as 'amt' | 'pct');
-            setDiscountValue(coupon.value);
+    const handleApplyCoupon = async (code: string) => {
+        if (!code.trim()) {
+            setAppliedCoupon('');
+            setDiscountValue(0);
+            return;
+        }
+        const res = await validateAndApplyCoupon(code);
+        if (res.success && res.coupon) {
+            setAppliedCoupon(res.coupon.code);
+            setDiscountType(res.coupon.type);
+            setDiscountValue(res.coupon.value);
         } else {
+            alert(res.error || 'Invalid coupon');
             setAppliedCoupon('');
             setDiscountValue(0);
         }
     };
 
-    const handlePrintBill = (t: TableView) => {
+    const handlePrintBill = async (t: TableView) => {
         const calc = getCheckoutCalculation(t);
         const token = t.orders?.[0]?.token_no;
+        const now = new Date();
+
+        const printerName = restaurantSettings?.printer_name;
+        if (printerName) {
+            const escCommands = buildReceiptCommands({
+                restaurantName: 'HOTEL TAJ OOTY',
+                address: 'Main Bazaar Road, Ooty',
+                phone: '+91 423 244 4000',
+                billNo: t.orders?.[0]?.id?.slice(-6).toUpperCase() || `B-${t.table_no}`,
+                tableNo: `T-${t.table_no}`,
+                customerName: t.customer_name ?? 'Guest',
+                date: `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`,
+                items: calc.allItems.map(i => ({
+                    name: i.name,
+                    qty: i.qty,
+                    price: i.price,
+                    amount: i.qty * i.effectivePrice
+                })),
+                subtotal: calc.subtotal,
+                discount: calc.discountAmt,
+                pointsRedeemed: pointsToRedeem,
+                pointsDiscount: calc.loyaltyDiscount,
+                taxableAmount: calc.taxableAmount,
+                serviceCharge: calc.service,
+                cgst: calc.cgst,
+                sgst: calc.sgst,
+                grandTotal: calc.grand,
+                footerNote: settings.footerNote || 'Thank you! Visit again.'
+            });
+
+            const res = await printThermalReceipt(printerName, escCommands);
+            if (res.success) {
+                setBillPrinted(true);
+                return;
+            }
+        }
+
         const w = window.open('', '_blank', 'width=380,height=600');
         if (!w) return;
-        const now = new Date();
         w.document.write(`<!DOCTYPE html>
 <html><head><title>Bill - T${t.table_no}</title>
 <style>
@@ -502,12 +538,15 @@ ${calc.allItems.map(i => {
     </div>`;
         }).join('')}
 <div class="sep"></div>
-<div class="row"><span>Subtotal</span><span>₹${calc.subtotal.toFixed(0)}</span></div>
-${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(0)}</span></div>` : ''}
-<div class="row"><span>CGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.cgst.toFixed(0)}</span></div>
-<div class="row"><span>SGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.sgst.toFixed(0)}</span></div>
+<div class="row"><span>Subtotal</span><span>₹${calc.subtotal.toFixed(2)}</span></div>
+${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(2)}</span></div>` : ''}
+${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem} pts)</span><span>-₹${calc.loyaltyDiscount.toFixed(2)}</span></div>` : ''}
+<div class="row"><span>Taxable Amount</span><span>₹${calc.taxableAmount.toFixed(2)}</span></div>
+${calc.service > 0 ? `<div class="row"><span>Service Charge (${settings.serviceChargeRate}%)</span><span>₹${calc.service.toFixed(2)}</span></div>` : ''}
+<div class="row"><span>CGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.cgst.toFixed(2)}</span></div>
+<div class="row"><span>SGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.sgst.toFixed(2)}</span></div>
 <div class="sep"></div>
-<div class="row big"><span>GRAND TOTAL</span><span>₹${calc.grand.toFixed(0)}</span></div>
+<div class="row big"><span>GRAND TOTAL</span><span>₹${calc.grand.toFixed(2)}</span></div>
 <div class="sep"></div>
 <p class="center bold">${settings.footerNote}</p>
 <script>window.onload=()=>{window.print();window.close();}</script>
@@ -528,14 +567,37 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
             }
             const calc = getCheckoutCalculation(t);
             const orderIds = t.orders.map(o => o.id);
-            // FIX 1: Use real bill insert with actual payment_method
-            const result = await settleBillWithPayment(orderIds, calc.grand, paymentMethod);
+
+            let result;
+            if (isMultiTenderEnabled && multiTenderRows.length > 0) {
+                result = await settleBillWithSplitPayment(orderIds, calc.grand, multiTenderRows);
+            } else {
+                result = await settleBillWithPayment(orderIds, calc.grand, paymentMethod);
+            }
+
             if (!result.success) {
                 alert(`Settlement failed: ${result.error}`);
                 return;
             }
+
+            // Process Loyalty Points Earn & Redeem
+            const customerPhone = t.customer_phone || t.orders?.[0]?.customer_phone;
+            const customerName = t.customer_name || t.orders?.[0]?.customer_name || 'Guest';
+
+            if (customerPhone) {
+                const billId = (result as any)?.billId;
+                if (pointsToRedeem > 0) {
+                    await redeemLoyaltyPoints(customerPhone, pointsToRedeem, billId);
+                }
+                const earnRes = await earnLoyaltyPoints(customerPhone, customerName, calc.grand, billId);
+                if (earnRes.success && earnRes.pointsEarned > 0) {
+                    setLoyaltyToast(`+${earnRes.pointsEarned} points earned! New balance: ${earnRes.newBalance} points`);
+                    setTimeout(() => setLoyaltyToast(null), 5000);
+                }
+            }
+
+            setPointsToRedeem(0);
             setSelectedTable(null);
-            // loadData refreshes table states; loadShiftData refreshes payment breakdown
             loadData();
             loadShiftData();
         } catch (e) {
@@ -558,58 +620,51 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         }
     };
 
-    const handleUpdateMenuStock = async (itemId: string, isAvailable: boolean, qty: number | null) => {
-        if (!hasPerm('view_menu') && !hasPerm('manage_inventory')) {
-            triggerPermissionDenied('view_menu');
-            return;
-        }
-        const { error } = await supabase.from('menu_items').update({ is_available: isAvailable, stock_qty: qty }).eq('id', itemId);
-        if (error) {
-            alert('Failed to update stock');
-        } else {
-            loadData();
-        }
+    const handleUpdateMenuStock = async (itemId: string, isAvailable: boolean, stockQty?: number | null) => {
+        const payload: any = { is_available: isAvailable };
+        if (stockQty !== undefined) payload.stock_qty = stockQty;
+        const { error } = await supabase.from('menu_items').update(payload).eq('id', itemId);
+        if (!error) loadData();
     };
 
     const handleStaffAttendance = async (action: 'clock_in' | 'clock_out') => {
-        if (!hasPerm('manage_staff')) {
-            triggerPermissionDenied('manage_staff');
+        if (!attendanceStaffId) {
+            alert('Select a staff member');
             return;
         }
-        if (!attendanceStaffId) return;
-
+        const now = new Date().toISOString();
         if (action === 'clock_in') {
-            const { error } = await supabase.from('staff_attendance').insert({
-                staff_id: attendanceStaffId,
-                status: 'active'
-            });
-            if (error) {
-                alert('Clock-in failed: ' + error.message);
-            } else {
+            const { error } = await supabase.from('staff_attendance').insert({ staff_id: attendanceStaffId, clock_in: now });
+            if (error) alert('Failed to clock in: ' + error.message);
+            else {
+                alert('Clocked in successfully!');
                 loadData();
             }
         } else {
-            const activeLog = attendanceLogs.find(a => a.staff_id === attendanceStaffId && a.clock_out === null);
-            if (!activeLog) {
-                alert('No active clock-in session found for this staff member.');
-                return;
-            }
-            const { error } = await supabase.from('staff_attendance').update({
-                clock_out: new Date().toISOString(),
-                status: 'completed'
-            }).eq('id', activeLog.id);
-
-            if (error) {
-                alert('Clock-out failed: ' + error.message);
+            const { data: openLogs } = await supabase.from('staff_attendance')
+                .select('*')
+                .eq('staff_id', attendanceStaffId)
+                .is('clock_out', null)
+                .order('clock_in', { ascending: false })
+                .limit(1);
+            if (openLogs && openLogs.length > 0) {
+                const { error } = await supabase.from('staff_attendance')
+                    .update({ clock_out: now })
+                    .eq('id', openLogs[0].id);
+                if (error) alert('Failed to clock out: ' + error.message);
+                else {
+                    alert('Clocked out successfully!');
+                    loadData();
+                }
             } else {
-                loadData();
+                alert('No active clock-in found for this staff member');
             }
         }
     };
 
     const triggerPermissionDenied = (permKey: string) => {
         setDeniedPermission(permKey);
-        setTimeout(() => setDeniedPermission(null), 4500);
+        setTimeout(() => setDeniedPermission(null), 4000);
     };
 
     const handleSidebarAction = (actionId: string, permKey: string) => {
@@ -618,101 +673,75 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
             return;
         }
         setIsSidebarOpen(false);
-        if (actionId === 'Dashboard' || actionId === 'bento') {
-            setView('bento');
-            setSelectedTable(null);
-        } else if (['tables', 'takeaway', 'history', 'reports', 'online_orders', 'stock_inventory'].includes(actionId)) {
-            setView(actionId as MainView);
-            setSelectedTable(null);
-        } else if (actionId === 'Kitchen Tickets') {
-            setView('bento');
-        } else {
-            setActiveOpModal(actionId);
-        }
+        if (actionId === 'Dashboard') setView('bento');
+        else if (actionId === 'tables') setView('tables');
+        else if (actionId === 'takeaway') setView('takeaway');
+        else if (actionId === 'online_orders') setView('online_orders');
+        else if (actionId === 'history') setView('history');
+        else if (actionId === 'reports') setView('reports');
+        else if (actionId === 'Kitchen Tickets') setView('kitchen_tickets');
+        else if (actionId === 'stock_inventory') setView('stock_inventory');
+        else if (actionId === 'Staff Roster') setView('staff_roster');
+        else if (actionId === 'CRM Customers') setView('crm_customers');
+        else if (actionId === 'Table Configuration') setView('table_config');
+        else if (actionId === 'GST Settings') setView('gst_settings');
+        else if (actionId === 'Drawer Session') setActiveOpModal('drawer_session');
+        else if (actionId === 'Petty Expenses') setActiveOpModal('petty_expenses');
+        else if (actionId === 'Export') setActiveOpModal('export');
     };
 
-    // FIX 2: Open register session — persisted to DB
-    const handleOpenSession = async (float: number) => {
-        const result = await openRegisterSession(float);
-        if (result.success && result.session) {
+    const handleOpenSession = async (floatAmount: number) => {
+        const res = await openRegisterSession(floatAmount);
+        if (res.success && res.session) {
             setIsRegisterOpen(true);
-            setRegisterSessionId(result.session.id);
-            setOpeningFloat(float);
-            setExpenses([]);
-            // Refresh shift data so expected cash is recalculated
+            setRegisterSessionId(res.session.id);
+            setOpeningFloat(Number(res.session.opening_float) || 0);
             loadShiftData();
         } else {
-            alert(`Failed to open register: ${result.error}`);
+            alert(res.error || 'Failed to open register session');
         }
     };
 
-    // FIX 2: Add petty expense — persisted to DB
-    const handleAddExpense = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newExpensePurpose || newExpenseAmount <= 0) return;
-        if (!registerSessionId) {
-            alert('Please open the register session first.');
-            return;
-        }
-        const result = await addPettyExpense(registerSessionId, newExpensePurpose, newExpenseAmount);
-        if (result.success && result.expense) {
-            const entry: PettyCashEntry = {
-                id: result.expense.id,
-                purpose: result.expense.description,
-                amount: result.expense.amount,
-                created_at: result.expense.created_at
-            };
-            setExpenses(prev => [entry, ...prev]);
-        } else {
-            alert(`Failed to save expense: ${result.error}`);
-        }
-        setNewExpensePurpose('');
-        setNewExpenseAmount(0);
-        setActiveOpModal(null);
-    };
-
-    // FIX 2: Close session — persisted to DB
-    const handleCloseSession = async () => {
+    const handleCloseSession = async (closingCash: number) => {
         if (!registerSessionId) return;
-        const result = await closeRegisterSession(registerSessionId, actualClosingCash);
-        if (result.success) {
-            const closingLog = {
-                closed_at: new Date().toLocaleTimeString(),
-                expected: expectedCash,
-                actual: actualClosingCash,
-                variance: actualClosingCash - expectedCash
-            };
-            setRegisterLogs(prev => [closingLog, ...prev]);
+        const res = await closeRegisterSession(registerSessionId, closingCash);
+        if (res.success) {
             setIsRegisterOpen(false);
             setRegisterSessionId(null);
+            setActualClosingCash(closingCash);
+            alert('Register session closed successfully!');
+            loadShiftData();
         } else {
-            alert(`Failed to close register: ${result.error}`);
+            alert(res.error || 'Failed to close session');
         }
-        setActiveOpModal(null);
+    };
+
+    const handleAddExpense = async (desc: string, amt: number) => {
+        if (!registerSessionId) {
+            alert('Cash register session must be open to log petty expenses');
+            return;
+        }
+        const res = await addPettyExpense(registerSessionId, desc, amt);
+        if (res.success) {
+            setNewExpensePurpose('');
+            setNewExpenseAmount(0);
+            loadShiftData();
+        } else {
+            alert(res.error || 'Failed to record expense');
+        }
     };
 
     const toggleAggregator = async (aggregator: 'swiggy' | 'zomato') => {
-        if (!restaurantSettings) return;
-        const key = `${aggregator}_enabled`;
-        const updatedVal = !restaurantSettings[key];
-
-        // Optimistic local state update
-        const updated = {
-            ...restaurantSettings,
-            [key]: updatedVal
-        };
-        setRestaurantSettings(updated);
-
-        // Persistent update in database
-        const { error } = await supabase
-            .from('restaurant_settings')
-            .update({ [key]: updatedVal })
-            .eq('id', restaurantSettings.id);
-
-        if (error) {
-            alert(`Failed to toggle ${aggregator} setting: ${error.message}`);
-            // Rollback optimistic state
-            setRestaurantSettings(restaurantSettings);
+        const newSettings = { ...settings };
+        if (aggregator === 'swiggy') {
+            newSettings.headerNote = settings.headerNote;
+        }
+        setSettings(newSettings);
+        if (restaurantSettings) {
+            const field = aggregator === 'swiggy' ? 'is_swiggy_active' : 'is_zomato_active';
+            const val = !restaurantSettings[field];
+            await supabase.from('restaurant_settings').update({ [field]: val }).eq('id', restaurantSettings.id);
+            setRestaurantSettings({ ...restaurantSettings, [field]: val });
         }
     };
 
@@ -723,13 +752,16 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
         discountValue, setDiscountValue, appliedCoupon, setAppliedCoupon, currentRoleName,
         paymentMethod, setPaymentMethod, submittingPayment, billPrinted, setBillPrinted,
         isSplitEnabled, setIsSplitEnabled, splitGuests, setSplitGuests,
+        isMultiTenderEnabled, setIsMultiTenderEnabled, multiTenderRows, setMultiTenderRows,
+        pointsToRedeem, setPointsToRedeem, customerLoyalty, setCustomerLoyalty, loyaltyToast, setLoyaltyToast, fetchLoyaltyInfo,
         dayStats, isRegisterOpen, setIsRegisterOpen, openingFloat, setOpeningFloat, registerSessionId,
         expectedCash, actualClosingCash, setActualClosingCash, registerLogs,
         expenses, newExpensePurpose, setNewExpensePurpose, newExpenseAmount, setNewExpenseAmount,
-        takeawayOrders, onlineOrders, restaurantSettings, toggleAggregator, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
+        takeawayOrders, onlineOrders, restaurantSettings, setRestaurantSettings, toggleAggregator, isSidebarOpen, setIsSidebarOpen, isSettingsOpen, setIsSettingsOpen,
         settings, setSettings, activeOpModal, setActiveOpModal, deniedPermission, setDeniedPermission,
         selectedReport, setSelectedReport, attendanceStaffId, setAttendanceStaffId, rolesList,
         userVisibleWidgets, setUserVisibleWidgets, userWidgetOrder, setUserWidgetOrder, isCustomizeOpen, setIsCustomizeOpen,
+        isPrinterModalOpen, setIsPrinterModalOpen,
         hasPerm, canApplyDiscount, canSettleBills, loadData, loadShiftData, handleSelectTable,
         getCheckoutCalculation, handleApplyCoupon, handlePrintBill, handleSettlePayment,
         handleToggleItemStock, handleStaffAttendance, handleUpdateMenuStock, triggerPermissionDenied,

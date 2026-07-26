@@ -4,17 +4,10 @@ import { useState, Dispatch, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
     Utensils, User, Minus, Plus, Banknote, CreditCard, QrCode, 
-    Printer, Check, Loader2, Tag, Percent, X
+    Printer, Check, Loader2, Tag, Percent, X, Sparkles
 } from 'lucide-react';
 import { fmt } from './utils';
 import { applyOrderItemDiscount } from '@/features/ordering/actions/adminActions';
-
-const PRESET_COUPONS = [
-    { code: 'TAJ10', type: 'pct', value: 10, description: '10% Restaurant Special' },
-    { code: 'WELCOME50', type: 'amt', value: 50, description: '₹50 Flat Welcome Discount' },
-    { code: 'FESTIVE15', type: 'pct', value: 15, description: '15% Festive Occasion Discount' },
-    { code: 'VIP200', type: 'amt', value: 200, description: '₹200 Flat VIP Discount' }
-];
 
 const DISCOUNT_REASONS = ['Complimentary', 'Loyalty Discount', 'Manager Comp', 'Other'];
 
@@ -23,8 +16,8 @@ interface Props {
     setSelectedTable: (table: any) => void;
     isRegisterOpen: boolean;
     canSettleBills: boolean;
-    paymentMethod: 'cash' | 'card' | 'upi';
-    setPaymentMethod: (method: 'cash' | 'card' | 'upi') => void;
+    paymentMethod: 'cash' | 'card' | 'upi' | 'split';
+    setPaymentMethod: (method: 'cash' | 'card' | 'upi' | 'split') => void;
     submittingPayment: boolean;
     billPrinted: boolean;
     discountType: 'amt' | 'pct';
@@ -37,6 +30,14 @@ interface Props {
     setIsSplitEnabled: (split: boolean) => void;
     splitGuests: number;
     setSplitGuests: Dispatch<SetStateAction<number>>;
+    isMultiTenderEnabled?: boolean;
+    setIsMultiTenderEnabled?: (enabled: boolean) => void;
+    multiTenderRows?: { method: 'cash' | 'card' | 'upi'; amount: number }[];
+    setMultiTenderRows?: (rows: { method: 'cash' | 'card' | 'upi'; amount: number }[]) => void;
+    pointsToRedeem?: number;
+    setPointsToRedeem?: (pts: number) => void;
+    customerLoyalty?: any;
+    loyaltyToast?: string | null;
     settings: any;
     handlePrintBill: (table: any) => void;
     handleSettlePayment: (table: any) => void;
@@ -64,6 +65,14 @@ export function BillingCheckout({
     setIsSplitEnabled,
     splitGuests,
     setSplitGuests,
+    isMultiTenderEnabled = false,
+    setIsMultiTenderEnabled = () => {},
+    multiTenderRows = [],
+    setMultiTenderRows = () => {},
+    pointsToRedeem = 0,
+    setPointsToRedeem = () => {},
+    customerLoyalty = null,
+    loyaltyToast = null,
     settings,
     handlePrintBill,
     handleSettlePayment,
@@ -237,20 +246,21 @@ export function BillingCheckout({
                             {/* Coupon Discount block */}
                             <div>
                                 <p className="text-[10px] uppercase font-bold tracking-wider text-[#C9974A] mb-1.5">Apply Special Promo Offer</p>
-                                <div className="grid grid-cols-2 gap-1.5 mb-2">
-                                    {PRESET_COUPONS.map(c => (
-                                        <button
-                                            key={c.code}
-                                            onClick={() => handleApplyCoupon(c.code)}
-                                            className={`py-1.5 px-2 rounded-xl text-[9px] font-bold border transition-all text-left flex justify-between items-center
-                                                ${appliedCoupon === c.code
-                                                    ? 'bg-[#C9974A]/20 border-[#C9974A] text-[#4E1414]'
-                                                    : 'bg-white border-gray-200 text-gray-400 hover:border-[#C9974A]/40'}`}
-                                        >
-                                            <span>{c.code}</span>
-                                            <span className="text-[8px] font-medium opacity-80">{c.type === 'pct' ? `${c.value}%` : `₹${c.value}`}</span>
-                                        </button>
-                                    ))}
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Enter Promo Code (e.g. TAJ10)"
+                                        value={appliedCoupon}
+                                        onChange={e => setAppliedCoupon(e.target.value.toUpperCase())}
+                                        className="flex-1 font-mono font-bold text-xs px-3 py-2 border rounded-xl border-[#C9974A]/40 uppercase bg-[#F6EEDF]/20 focus:outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => handleApplyCoupon(appliedCoupon)}
+                                        className="px-4 py-2 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold text-xs rounded-xl"
+                                    >
+                                        Apply
+                                    </button>
                                 </div>
 
                                 <div className="flex gap-2">
@@ -283,6 +293,62 @@ export function BillingCheckout({
                                         </button>
                                     )}
                                 </div>
+
+                                {/* Customer Loyalty Card */}
+                                {selectedTable?.customer_phone && (
+                                    <div className="mt-3 p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-950 space-y-2">
+                                        <div className="flex justify-between items-center text-xs font-bold">
+                                            <span className="flex items-center gap-1.5 text-[#4E1414]">
+                                                <Sparkles className="w-3.5 h-3.5 text-[#C9974A]" />
+                                                Customer Loyalty
+                                            </span>
+                                            {customerLoyalty ? (
+                                                <span className="bg-[#4E1414] text-[#F6EEDF] px-2 py-0.5 rounded-md text-[10px] font-extrabold">
+                                                    {customerLoyalty.points_balance} pts (₹{(customerLoyalty.points_balance * (settings.loyalty_redemption_rate || 0.5)).toFixed(2)})
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-amber-700 font-semibold italic">New Customer</span>
+                                            )}
+                                        </div>
+
+                                        {customerLoyalty && customerLoyalty.points_balance > 0 ? (
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={customerLoyalty.points_balance}
+                                                    value={pointsToRedeem || ''}
+                                                    onChange={e => {
+                                                        const val = Math.min(customerLoyalty.points_balance, Math.max(0, parseInt(e.target.value) || 0));
+                                                        setPointsToRedeem(val);
+                                                    }}
+                                                    placeholder="Points to redeem"
+                                                    className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPointsToRedeem(customerLoyalty.points_balance)}
+                                                    className="px-2.5 py-1 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold text-[10px] rounded-lg shrink-0"
+                                                >
+                                                    Max
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[10px] text-amber-800 leading-snug font-medium">
+                                                {customerLoyalty
+                                                    ? '0 points available — earn points on this order!'
+                                                    : 'New customer — start earning points from this order!'}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {loyaltyToast && (
+                                    <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                                        <span>{loyaltyToast}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Split bill selector */}
@@ -326,6 +392,11 @@ export function BillingCheckout({
                                         <div className="flex justify-between text-[#4E1414]/70 border-b border-[#C9974A]/10 pb-1.5 mb-1">
                                             <span>Taxable Amount</span><span>₹{taxableAmount.toFixed(0)}</span>
                                         </div>
+                                        {settings.chargeServiceTax && (
+                                            <div className="flex justify-between text-[#4E1414]/70">
+                                                <span>Service Charge ({settings.serviceChargeRate}%)</span><span>₹{service.toFixed(0)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between text-[#4E1414]/70">
                                             <span>CGST ({(settings.gstRate / 2)}%)</span>
                                             <span>₹{cgst.toFixed(0)}</span>
@@ -334,11 +405,6 @@ export function BillingCheckout({
                                             <span>SGST ({(settings.gstRate / 2)}%)</span>
                                             <span>₹{sgst.toFixed(0)}</span>
                                         </div>
-                                        {settings.chargeServiceTax && (
-                                            <div className="flex justify-between text-[#4E1414]/70">
-                                                <span>Service Charge ({settings.serviceChargeRate}%)</span><span>₹{service.toFixed(0)}</span>
-                                            </div>
-                                        )}
                                         {isSplitEnabled && (
                                             <div className="flex justify-between text-xs text-blue-700 font-bold border-t border-[#C9974A]/10 pt-1.5 mt-1">
                                                 <span>Per Guest Share ({splitGuests} pax)</span>
@@ -353,28 +419,122 @@ export function BillingCheckout({
                                 );
                             })()}
 
-                            {/* Pay Method selection */}
+                            {/* Pay Method selection / Multi-Tender Breakdown */}
                             <div>
-                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#C9974A] mb-1.5">Settlement Channel</p>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[
-                                        { key: 'cash', label: 'CASH', icon: Banknote },
-                                        { key: 'card', label: 'CARD', icon: CreditCard },
-                                        { key: 'upi', label: 'UPI', icon: QrCode },
-                                    ].map(({ key, label, icon: Icon }) => (
-                                        <button
-                                            key={key}
-                                            onClick={() => setPaymentMethod(key as 'cash' | 'card' | 'upi')}
-                                            className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border font-bold text-[9px] transition-all
-                                                ${paymentMethod === key
-                                                    ? 'border-[#C9974A] bg-[#C9974A]/10 text-[#4E1414]'
-                                                    : 'border-gray-200 text-gray-400 bg-white hover:border-[#C9974A]/40 hover:text-[#4E1414]'}`}
-                                        >
-                                            <Icon className="w-4 h-4" />
-                                            {label}
-                                        </button>
-                                    ))}
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[10px] uppercase font-bold tracking-wider text-[#C9974A]">Settlement Channel</p>
+                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-[#4E1414]">
+                                        <input
+                                            type="checkbox"
+                                            checked={isMultiTenderEnabled}
+                                            onChange={e => {
+                                                const checked = e.target.checked;
+                                                setIsMultiTenderEnabled(checked);
+                                                if (checked && selectedTable) {
+                                                    const { grand } = getCheckoutCalculation(selectedTable);
+                                                    const half = Math.round(grand / 2);
+                                                    setMultiTenderRows([
+                                                        { method: 'cash', amount: half },
+                                                        { method: 'upi', amount: grand - half }
+                                                    ]);
+                                                }
+                                            }}
+                                            className="rounded border-[#C9974A]/40 text-[#4E1414] focus:ring-0"
+                                        />
+                                        <span>Multi-Tender Split Payment</span>
+                                    </label>
                                 </div>
+
+                                {!isMultiTenderEnabled ? (
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { key: 'cash', label: 'CASH', icon: Banknote },
+                                            { key: 'card', label: 'CARD', icon: CreditCard },
+                                            { key: 'upi', label: 'UPI', icon: QrCode },
+                                        ].map(({ key, label, icon: Icon }) => (
+                                            <button
+                                                key={key}
+                                                onClick={() => setPaymentMethod(key as 'cash' | 'card' | 'upi')}
+                                                className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border font-bold text-[9px] transition-all
+                                                    ${paymentMethod === key
+                                                        ? 'border-[#C9974A] bg-[#C9974A]/10 text-[#4E1414]'
+                                                        : 'border-gray-200 text-gray-400 bg-white hover:border-[#C9974A]/40 hover:text-[#4E1414]'}`}
+                                            >
+                                                <Icon className="w-4 h-4" />
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 bg-stone-50 border border-[#C9974A]/30 rounded-2xl p-3">
+                                        <p className="text-[10px] font-bold text-stone-500 uppercase">Enter Amounts per Payment Method</p>
+                                        {multiTenderRows.map((row, idx) => (
+                                            <div key={idx} className="flex gap-2 items-center">
+                                                <select
+                                                    value={row.method}
+                                                    onChange={e => {
+                                                        const newRows = [...multiTenderRows];
+                                                        newRows[idx].method = e.target.value as 'cash' | 'card' | 'upi';
+                                                        setMultiTenderRows(newRows);
+                                                    }}
+                                                    className="text-xs font-bold p-2 border rounded-xl border-stone-300 bg-white"
+                                                >
+                                                    <option value="cash">CASH</option>
+                                                    <option value="card">CARD</option>
+                                                    <option value="upi">UPI</option>
+                                                </select>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={row.amount || ''}
+                                                    onChange={e => {
+                                                        const val = parseFloat(e.target.value) || 0;
+                                                        const newRows = [...multiTenderRows];
+                                                        newRows[idx].amount = val;
+                                                        setMultiTenderRows(newRows);
+                                                    }}
+                                                    placeholder="Amount (₹)"
+                                                    className="flex-1 text-xs font-bold p-2 border rounded-xl border-stone-300 bg-white"
+                                                />
+                                                {multiTenderRows.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMultiTenderRows(multiTenderRows.filter((_, i) => i !== idx))}
+                                                        className="p-1 text-stone-400 hover:text-red-600"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        {multiTenderRows.length < 3 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setMultiTenderRows([...multiTenderRows, { method: 'card', amount: 0 }])}
+                                                className="text-[10px] font-bold text-[#C9974A] hover:underline flex items-center gap-1"
+                                            >
+                                                + Add another payment method
+                                            </button>
+                                        )}
+
+                                        {(() => {
+                                            const { grand } = getCheckoutCalculation(selectedTable);
+                                            const totalPaid = multiTenderRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+                                            const remaining = grand - totalPaid;
+                                            return (
+                                                <div className={`p-2 rounded-xl text-xs font-bold flex justify-between ${
+                                                    Math.abs(remaining) < 0.05 ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'
+                                                }`}>
+                                                    <span>Total Paid: ₹{totalPaid.toFixed(0)}</span>
+                                                    <span>
+                                                        {Math.abs(remaining) < 0.05 ? '✓ Balanced' : `Remaining: ₹${remaining.toFixed(0)}`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

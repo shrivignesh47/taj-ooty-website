@@ -1,0 +1,1183 @@
+{
+  "tables": [
+    "bill_payments",
+    "bills",
+    "cash_register_sessions",
+    "categories",
+    "coupons",
+    "dashboard_preferences",
+    "kitchen_stations",
+    "menu_items",
+    "order_item_status",
+    "order_items",
+    "order_status_history",
+    "orders",
+    "permissions",
+    "petty_expenses",
+    "restaurant_settings",
+    "restaurant_tables",
+    "role_permissions",
+    "roles",
+    "staff_activity_log",
+    "staff_attendance",
+    "staff_users",
+    "station_category_map"
+  ],
+  "tableDetails": {
+    "bill_payments": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "bill_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "payment_method",
+          "data_type": "text"
+        },
+        {
+          "column_name": "amount",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "staff can manage bill payments",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "bills": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "order_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "total",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "cashier_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "paid_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "payment_method",
+          "data_type": "text"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "staff can view bills",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can manage bills",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "cash_register_sessions": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "cashier_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "opening_float",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "closing_amount",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "opened_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "closed_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        }
+      ],
+      "count": "1",
+      "policies": [
+        {
+          "policyname": "cashier can manage own register",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "categories": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "sort_order",
+          "data_type": "integer"
+        }
+      ],
+      "count": "29",
+      "policies": [
+        {
+          "policyname": "public can view categories",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can manage categories",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "coupons": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "code",
+          "data_type": "text"
+        },
+        {
+          "column_name": "type",
+          "data_type": "text"
+        },
+        {
+          "column_name": "value",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "description",
+          "data_type": "text"
+        },
+        {
+          "column_name": "is_active",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "valid_from",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "valid_until",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "usage_limit",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "times_used",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "4",
+      "policies": [
+        {
+          "policyname": "staff can view active coupons",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "admin can manage coupons",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "dashboard_preferences": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "staff_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "visible_widgets",
+          "data_type": "jsonb"
+        },
+        {
+          "column_name": "widget_order",
+          "data_type": "jsonb"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "1",
+      "policies": [
+        {
+          "policyname": "staff can manage own dashboard prefs",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "public read access dashboard_preferences",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "kitchen_stations": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "color",
+          "data_type": "text"
+        },
+        {
+          "column_name": "is_active",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "sort_order",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "7",
+      "policies": [
+        {
+          "policyname": "admin can manage stations",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "kitchen can view stations",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "menu_items": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "category_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "price",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "image_url",
+          "data_type": "text"
+        },
+        {
+          "column_name": "is_available",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "is_veg",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "stock_qty",
+          "data_type": "integer"
+        }
+      ],
+      "count": "315",
+      "policies": [
+        {
+          "policyname": "public can view available menu items",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can view all menu items",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff with edit_menu can manage menu",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "order_item_status": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "order_item_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "is_done",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "marked_by",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "marked_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "kitchen can insert item status",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        },
+        {
+          "policyname": "kitchen can manage item status",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "order_items": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "order_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "menu_item_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "qty",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "notes",
+          "data_type": "text"
+        },
+        {
+          "column_name": "price_at_order",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        },
+        {
+          "column_name": "discount_percent",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "discount_reason",
+          "data_type": "text"
+        }
+      ],
+      "count": "4",
+      "policies": [
+        {
+          "policyname": "public can add order items on creation",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        },
+        {
+          "policyname": "staff can manage order items",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "no direct public select on order_items",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "order_status_history": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "order_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        },
+        {
+          "column_name": "changed_by",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "changed_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "3",
+      "policies": [
+        {
+          "policyname": "staff can view order history",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can log order history",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        }
+      ]
+    },
+    "orders": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "table_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "customer_name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "customer_phone",
+          "data_type": "text"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        },
+        {
+          "column_name": "waiter_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "source",
+          "data_type": "text"
+        },
+        {
+          "column_name": "token_no",
+          "data_type": "text"
+        },
+        {
+          "column_name": "idempotency_key",
+          "data_type": "text"
+        }
+      ],
+      "count": "1",
+      "policies": [
+        {
+          "policyname": "public can create orders",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        },
+        {
+          "policyname": "staff can update orders",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "UPDATE"
+        },
+        {
+          "policyname": "no direct public select on orders",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "permissions": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "key",
+          "data_type": "text"
+        }
+      ],
+      "count": "19",
+      "policies": [
+        {
+          "policyname": "authenticated users can view permissions",
+          "permissive": "PERMISSIVE",
+          "roles": "{authenticated}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can manage permissions",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "petty_expenses": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "register_session_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "description",
+          "data_type": "text"
+        },
+        {
+          "column_name": "amount",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "recorded_by",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "cashier can manage expenses",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "restaurant_settings": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "restaurant_name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "gst_number",
+          "data_type": "text"
+        },
+        {
+          "column_name": "fssai_number",
+          "data_type": "text"
+        },
+        {
+          "column_name": "address",
+          "data_type": "text"
+        },
+        {
+          "column_name": "phone",
+          "data_type": "text"
+        },
+        {
+          "column_name": "email",
+          "data_type": "text"
+        },
+        {
+          "column_name": "website",
+          "data_type": "text"
+        },
+        {
+          "column_name": "service_charge_percent",
+          "data_type": "numeric"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "auto_print_on_accept",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "printer_name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "print_kot",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "print_bill",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "kds_config",
+          "data_type": "jsonb"
+        },
+        {
+          "column_name": "station_routing_enabled",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "swiggy_enabled",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "zomato_enabled",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "swiggy_merchant_id",
+          "data_type": "text"
+        },
+        {
+          "column_name": "zomato_merchant_id",
+          "data_type": "text"
+        },
+        {
+          "column_name": "legal_business_name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "trade_name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "gstin",
+          "data_type": "text"
+        },
+        {
+          "column_name": "tax_scheme",
+          "data_type": "text"
+        },
+        {
+          "column_name": "registration_state",
+          "data_type": "text"
+        },
+        {
+          "column_name": "default_hsn_code",
+          "data_type": "text"
+        },
+        {
+          "column_name": "enable_ecommerce_tax",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "pricing_strategy",
+          "data_type": "text"
+        },
+        {
+          "column_name": "print_gstin_bill",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "print_cgst_sgst_split",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "print_hsn_items",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "print_customer_gstin",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "aggregator_mappings",
+          "data_type": "jsonb"
+        }
+      ],
+      "count": "1",
+      "policies": [
+        {
+          "policyname": "admin can manage settings",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "restaurant_tables": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "table_no",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "qr_code_url",
+          "data_type": "text"
+        },
+        {
+          "column_name": "assigned_waiter_id",
+          "data_type": "uuid"
+        }
+      ],
+      "count": "15",
+      "policies": [
+        {
+          "policyname": "all staff can view tables",
+          "permissive": "PERMISSIVE",
+          "roles": "{authenticated}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff with manage_tables can modify tables",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "public can view basic table info",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "role_permissions": {
+      "columns": [
+        {
+          "column_name": "role_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "permission_id",
+          "data_type": "uuid"
+        }
+      ],
+      "count": "43",
+      "policies": [
+        {
+          "policyname": "authenticated users can view role_permissions",
+          "permissive": "PERMISSIVE",
+          "roles": "{authenticated}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can manage role_permissions",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "roles": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "is_custom",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "5",
+      "policies": [
+        {
+          "policyname": "staff with manage_roles can manage roles",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "authenticated users can view roles",
+          "permissive": "PERMISSIVE",
+          "roles": "{authenticated}",
+          "cmd": "SELECT"
+        }
+      ]
+    },
+    "staff_activity_log": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "staff_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "action",
+          "data_type": "text"
+        },
+        {
+          "column_name": "details",
+          "data_type": "jsonb"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "10",
+      "policies": [
+        {
+          "policyname": "admin can view activity log",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "server can insert activity log",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        }
+      ]
+    },
+    "staff_attendance": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "staff_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "clock_in",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "clock_out",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "allow_staff_select_attendance",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "allow_staff_insert_attendance",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "INSERT"
+        },
+        {
+          "policyname": "allow_staff_update_attendance",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "UPDATE"
+        }
+      ]
+    },
+    "staff_users": {
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "auth_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "name",
+          "data_type": "text"
+        },
+        {
+          "column_name": "phone",
+          "data_type": "text"
+        },
+        {
+          "column_name": "role_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "is_active",
+          "data_type": "boolean"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "count": "8",
+      "policies": [
+        {
+          "policyname": "staff users can view their own profile",
+          "permissive": "PERMISSIVE",
+          "roles": "{authenticated}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff can view all staff",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        },
+        {
+          "policyname": "staff with manage_staff can manage staff",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        }
+      ]
+    },
+    "station_category_map": {
+      "columns": [
+        {
+          "column_name": "station_id",
+          "data_type": "uuid"
+        },
+        {
+          "column_name": "category_id",
+          "data_type": "uuid"
+        }
+      ],
+      "count": "0",
+      "policies": [
+        {
+          "policyname": "admin can manage station map",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "ALL"
+        },
+        {
+          "policyname": "kitchen can view station map",
+          "permissive": "PERMISSIVE",
+          "roles": "{public}",
+          "cmd": "SELECT"
+        }
+      ]
+    }
+  },
+  "rlsEnabled": [
+    {
+      "relname": "restaurant_settings",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "cash_register_sessions",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "petty_expenses",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "dashboard_preferences",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "bill_payments",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "coupons",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "restaurant_tables",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "order_status_history",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "menu_items",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "orders",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "order_items",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "categories",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "role_permissions",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "permissions",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "bills",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "staff_users",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "staff_activity_log",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "staff_attendance",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "kitchen_stations",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "station_category_map",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "order_item_status",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "roles",
+      "relrowsecurity": true
+    }
+  ],
+  "rolesCount": 43,
+  "coupons": [
+    {
+      "code": "TAJ10",
+      "type": "pct",
+      "value": "10.00",
+      "is_active": true,
+      "times_used": 0
+    },
+    {
+      "code": "WELCOME50",
+      "type": "amt",
+      "value": "50.00",
+      "is_active": true,
+      "times_used": 0
+    },
+    {
+      "code": "FESTIVE15",
+      "type": "pct",
+      "value": "15.00",
+      "is_active": true,
+      "times_used": 0
+    },
+    {
+      "code": "VIP200",
+      "type": "amt",
+      "value": "200.00",
+      "is_active": true,
+      "times_used": 0
+    }
+  ]
+}

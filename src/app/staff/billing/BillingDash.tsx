@@ -10,6 +10,7 @@ import { BillingHistory } from './components/BillingHistory';
 import { BillingReports } from './components/BillingReports';
 import { BillingOnlineOrders } from './components/BillingOnlineOrders';
 import { CustomizeDashboardDrawer } from './components/CustomizeDashboardDrawer';
+import { PrinterSettingsModal } from './components/PrinterSettingsModal';
 import { AdminStaff } from '@/app/staff/admin/components/AdminStaff';
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { AdminExport } from '@/app/staff/admin/components/AdminExport';
@@ -67,6 +68,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                 logoutStaff={logoutStaff}
                 onGoHome={() => { s.setView('bento'); s.setSelectedTable(null); }}
                 onOpenCustomize={() => s.setIsCustomizeOpen(true)}
+                onOpenPrinterSetup={() => s.setIsPrinterModalOpen(true)}
             />
 
             {/* ── Main Viewport Content ── */}
@@ -283,6 +285,14 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                         setIsSplitEnabled={s.setIsSplitEnabled}
                         splitGuests={s.splitGuests}
                         setSplitGuests={s.setSplitGuests}
+                        isMultiTenderEnabled={s.isMultiTenderEnabled}
+                        setIsMultiTenderEnabled={s.setIsMultiTenderEnabled}
+                        multiTenderRows={s.multiTenderRows}
+                        setMultiTenderRows={s.setMultiTenderRows}
+                        pointsToRedeem={s.pointsToRedeem}
+                        setPointsToRedeem={s.setPointsToRedeem}
+                        customerLoyalty={s.customerLoyalty}
+                        loyaltyToast={s.loyaltyToast}
                         settings={s.settings}
                         handlePrintBill={s.handlePrintBill}
                         handleSettlePayment={s.handleSettlePayment}
@@ -556,7 +566,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                     </div>
                                 </div>
                                 <button
-                                    onClick={s.handleCloseSession}
+                                    onClick={() => s.handleCloseSession(s.actualClosingCash)}
                                     className="w-full bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-2.5 rounded-xl transition-colors mt-2"
                                 >
                                     Verify & Close Drawer
@@ -578,7 +588,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 <h3 className="text-[#F6EEDF] font-bold text-sm">Add Petty Cash Expense</h3>
                                 <button onClick={() => s.setActiveOpModal(null)} className="text-[#F6EEDF]/80 hover:text-white"><X className="w-4 h-4" /></button>
                             </div>
-                            <form onSubmit={s.handleAddExpense} className="p-6 space-y-4 text-xs">
+                            <form onSubmit={(e) => { e.preventDefault(); s.handleAddExpense(s.newExpensePurpose, s.newExpenseAmount); }} className="p-6 space-y-4 text-xs">
                                 <div>
                                     <label className="block text-gray-400 font-bold mb-1 uppercase tracking-wide">Expense Purpose / Vendor</label>
                                     <input
@@ -804,6 +814,22 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                     </div>
                 )}
             </AnimatePresence>
+
+            <PrinterSettingsModal
+                isOpen={s.isPrinterModalOpen}
+                onClose={() => s.setIsPrinterModalOpen(false)}
+                currentPrinterName={s.restaurantSettings?.printer_name}
+                currentUseFallback={s.restaurantSettings?.use_browser_fallback}
+                onSaved={(printerName, useFallback) => {
+                    if (s.restaurantSettings) {
+                        s.setRestaurantSettings({
+                            ...s.restaurantSettings,
+                            printer_name: printerName,
+                            use_browser_fallback: useFallback
+                        });
+                    }
+                }}
+            />
         </div>
     );
 }

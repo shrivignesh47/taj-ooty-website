@@ -26,7 +26,7 @@ async function requireCashierIdentity() {
 export async function settleBillWithPayment(
     orderIds: string[],
     totalAmount: number,
-    paymentMethod: 'cash' | 'card' | 'upi'
+    paymentMethod: 'cash' | 'card' | 'upi' | 'split'
 ) {
     const identity = await requireCashierIdentity();
     if ('error' in identity) return { success: false, error: identity.error };
@@ -66,6 +66,80 @@ export async function settleBillWithPayment(
         staff_id: identity.staff.id,
         action: 'ORDER_BILLED',
         details: { order_ids: orderIds, total: totalAmount, payment_method: paymentMethod }
+    });
+
+    revalidatePath('/staff/billing');
+    revalidatePath('/staff/orders');
+    revalidatePath('/staff/admin');
+    return { success: true };
+}
+
+export async function settleBillWithSplitPayment(
+    orderIds: string[],
+    totalAmount: number,
+    payments: { method: 'cash' | 'card' | 'upi'; amount: number }[]
+) {
+    const identity = await requireCashierIdentity();
+    if ('error' in identity) return { success: false, error: identity.error };
+
+    if (!payments || payments.length === 0) {
+        return { success: false, error: 'At least one payment method is required' };
+    }
+
+    const sumPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    if (Math.abs(sumPayments - totalAmount) > 0.05) {
+        return { success: false, error: `Payment sum (₹${sumPayments.toFixed(2)}) does not match bill total (₹${totalAmount.toFixed(2)})` };
+    }
+
+    const billPaymentMethod = payments.length > 1 ? 'split' : payments[0].method;
+
+    const { data: billData, error: billErr } = await supabaseAdmin
+        .from('bills')
+        .insert({
+            order_id: orderIds[0],
+            total: totalAmount,
+            payment_method: billPaymentMethod,
+            cashier_id: identity.staff.id,
+            paid_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+
+    if (billErr || !billData) return { success: false, error: `Bill insert failed: ${billErr?.message || 'Unknown error'}` };
+
+    const paymentRows = payments.map(p => ({
+        bill_id: billData.id,
+        payment_method: p.method,
+        amount: p.amount
+    }));
+
+    const { error: splitErr } = await supabaseAdmin
+        .from('bill_payments')
+        .insert(paymentRows);
+
+    if (splitErr) {
+        return { success: false, error: `Payment breakdown insert failed: ${splitErr.message}` };
+    }
+
+    const { error: statusErr } = await supabaseAdmin
+        .from('orders')
+        .update({ status: 'billed' })
+        .in('id', orderIds);
+
+    if (statusErr) return { success: false, error: `Order status update failed: ${statusErr.message}` };
+
+    await supabaseAdmin.from('order_status_history').insert(
+        orderIds.map(id => ({
+            order_id: id,
+            status: 'billed',
+            changed_by: identity.staff.id
+        }))
+    );
+
+    await supabaseAdmin.from('staff_activity_log').insert({
+        staff_id: identity.staff.id,
+        action: 'ORDER_BILLED_SPLIT',
+        details: { order_ids: orderIds, total: totalAmount, payments }
     });
 
     revalidatePath('/staff/billing');
@@ -172,11 +246,27 @@ export async function getSessionExpenses(sessionId: string) {
     return { success: true, expenses: data ?? [] };
 }
 
-// ─── FIX 1: Real payment breakdown from bills table ─────────────────────────
+// ─── FIX 1: Real payment breakdown from bills & bill_payments table ──────────
 
 export async function getTodayPaymentBreakdown() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    const { data: splitPayments } = await supabaseAdmin
+        .from('bill_payments')
+        .select('payment_method, amount')
+        .gte('created_at', today.toISOString());
+
+    if (splitPayments && splitPayments.length > 0) {
+        let cash = 0, card = 0, upi = 0;
+        for (const p of splitPayments) {
+            const amt = Number(p.amount) || 0;
+            if (p.payment_method === 'cash') cash += amt;
+            else if (p.payment_method === 'card') card += amt;
+            else if (p.payment_method === 'upi') upi += amt;
+        }
+        return { cash, card, upi };
+    }
 
     const { data, error } = await supabaseAdmin
         .from('bills')
@@ -191,7 +281,7 @@ export async function getTodayPaymentBreakdown() {
         if (bill.payment_method === 'cash') cash += t;
         else if (bill.payment_method === 'card') card += t;
         else if (bill.payment_method === 'upi') upi += t;
-        else cash += t; // default: cash if null/missing
+        else cash += t;
     }
     return { cash, card, upi };
 }

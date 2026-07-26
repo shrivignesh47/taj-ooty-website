@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, IndianRupee, RefreshCw, LogOut, LayoutGrid, SlidersHorizontal } from 'lucide-react';
+import { Menu, IndianRupee, RefreshCw, LogOut, LayoutGrid, SlidersHorizontal, Printer } from 'lucide-react';
 import { fmt } from './utils';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
     logoutStaff: (payload: FormData) => void;
     onGoHome?: () => void;
     onOpenCustomize?: () => void;
+    onOpenPrinterSetup?: () => void;
 }
 
 export function BillingHeader({
@@ -22,7 +23,8 @@ export function BillingHeader({
     loadData,
     logoutStaff,
     onGoHome,
-    onOpenCustomize
+    onOpenCustomize,
+    onOpenPrinterSetup
 }: Props) {
     return (
         <header className="bg-[#4E1414] text-[#F6EEDF] px-6 py-4 shadow-md sticky top-0 z-30 border-b border-[#C9974A]/30">
@@ -80,6 +82,17 @@ export function BillingHeader({
                         >
                             <SlidersHorizontal className="w-4 h-4" />
                             <span className="hidden md:inline">Customize</span>
+                        </button>
+                    )}
+
+                    {onOpenPrinterSetup && (
+                        <button
+                            onClick={onOpenPrinterSetup}
+                            className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#C9974A] hover:text-[#F6EEDF] transition-all text-xs font-bold cursor-pointer"
+                            title="Thermal Printer Setup"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span className="hidden md:inline">Printer</span>
                         </button>
                     )}
 

@@ -1,10 +1,11 @@
  
 "use client";
 
-import { useState } from 'react';
-import { Search, X, User, FileSpreadsheet, Printer } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, X, User, FileSpreadsheet, Printer, Sparkles, History as HistoryIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { getCustomerLoyaltyHistory, LoyaltyTransactionData } from '@/features/ordering/actions/loyaltyActions';
 
 interface Props {
     customers: any[];
@@ -15,6 +16,18 @@ interface Props {
 export function AdminCRM({ customers, orders, settings }: Props) {
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState<any | null>(null);
+    const [loyaltyLogs, setLoyaltyLogs] = useState<LoyaltyTransactionData[]>([]);
+
+    useEffect(() => {
+        if (selected?.phone) {
+            getCustomerLoyaltyHistory(selected.phone).then(res => {
+                if (res.success) setLoyaltyLogs(res.transactions);
+                else setLoyaltyLogs([]);
+            });
+        } else {
+            setLoyaltyLogs([]);
+        }
+    }, [selected]);
 
     const filtered = customers.filter(c =>
         (c.name?.toLowerCase() || '').includes(search.toLowerCase()) ||
@@ -152,6 +165,7 @@ ${chargeServiceTax ? `<div class="row"><span>Service Fee (${serviceChargeRate}%)
                             <tr>
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Phone</th>
+                                <th className="px-6 py-4">Loyalty Points</th>
                                 <th className="px-6 py-4">Visits</th>
                                 <th className="px-6 py-4">Lifetime Total</th>
                                 <th className="px-6 py-4">Latest Encounter</th>
@@ -171,7 +185,12 @@ ${chargeServiceTax ? `<div class="row"><span>Service Fee (${serviceChargeRate}%)
                                         {c.name || 'Unknown'}
                                     </td>
                                     <td className="px-6 py-4 font-medium text-[#241B15]/60">{c.phone || 'N/A'}</td>
-                                    <td className="px-6 py-4 font-black text-[#4E1414]">{c.visits}</td>
+                                    <td className="px-6 py-4 font-black text-amber-700">
+                                        <span className="bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full text-xs font-bold">
+                                            {c.points_balance ?? 0} pts
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 font-black text-[#4E1414]">{c.totalVisits || c.visits || 1}</td>
                                     <td className="px-6 py-4 font-black text-[#C9974A]">₹{c.totalSpent.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
                                     <td className="px-6 py-4 text-xs font-semibold text-[#241B15]/50">
                                         {c.lastVisit ? format(new Date(c.lastVisit), 'MMM dd, yyyy') : 'N/A'}
@@ -205,8 +224,20 @@ ${chargeServiceTax ? `<div class="row"><span>Service Fee (${serviceChargeRate}%)
                                 </div>
                                 <div className="bg-white p-4 rounded-xl border border-[#C9974A]/30">
                                     <p className="text-[10px] font-black text-[#4E1414] uppercase tracking-wider mb-1">Avg per Visit</p>
-                                    <p className="text-2xl font-black text-[#241B15]">₹{Math.round(selected.totalSpent / selected.visits).toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-[#241B15]">₹{Math.round(selected.totalSpent / (selected.totalVisits || selected.visits || 1)).toLocaleString()}</p>
                                 </div>
+                            </div>
+
+                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mt-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                                        <Sparkles className="w-3.5 h-3.5 text-[#C9974A]" /> Loyalty Points Balance
+                                    </span>
+                                    <span className="text-xs font-bold text-amber-800">
+                                        ₹{(Number(selected.points_balance || 0) * (settings?.loyalty_redemption_rate || 0.5)).toFixed(2)} value
+                                    </span>
+                                </div>
+                                <p className="text-3xl font-black text-amber-900">{selected.points_balance || 0} pts</p>
                             </div>
                         </div>
 
@@ -244,6 +275,32 @@ ${chargeServiceTax ? `<div class="row"><span>Service Fee (${serviceChargeRate}%)
                                         </div>
                                     );
                                 })}
+                            </div>
+
+                            <div className="mt-8 border-t border-[#C9974A]/20 pt-6">
+                                <h4 className="text-sm font-black text-[#4E1414] uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                                    <HistoryIcon className="w-4 h-4 text-[#C9974A]" /> Loyalty Transactions Log
+                                </h4>
+                                {loyaltyLogs.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {loyaltyLogs.map(log => (
+                                            <div key={log.id} className="bg-white p-3 rounded-xl border border-stone-200 text-xs flex justify-between items-center">
+                                                <div>
+                                                    <div className="font-bold text-gray-900 capitalize flex items-center gap-1.5">
+                                                        <span className={`w-2 h-2 rounded-full ${log.type === 'earned' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                                                        {log.type} {log.points} Points
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-500">{log.note || 'No notes'}</p>
+                                                </div>
+                                                <span className="text-[10px] font-medium text-gray-400">
+                                                    {format(new Date(log.created_at), 'MMM dd, HH:mm')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">No loyalty transactions recorded yet.</p>
+                                )}
                             </div>
                         </div>
                     </div>

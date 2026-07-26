@@ -8,6 +8,8 @@ import { fetchRestaurantSettings, saveKdsConfig } from '@/features/ordering/acti
 import { advanceOrderStatus, markKitchenOrderReady, startKitchenOrder, toggleOrderItemDone } from '@/features/ordering/actions/updateOrderStatus';
 import { LiveOrder, useLiveOrders } from '@/features/ordering/hooks/useLiveOrders';
 import { supabase } from '@/features/ordering/lib/supabase';
+import { printThermalReceipt } from '@/features/ordering/lib/thermalPrint';
+import { buildKOTCommands } from '@/features/ordering/lib/escpos';
 
 type SettingsState = {
     restaurant_name?: string;
@@ -92,20 +94,39 @@ function playPing(frequency = 880, duration = 0.4) {
     }
 }
 
-export function printKOT(order: LiveOrder) {
+async function printKOT(order: LiveOrder, printerName?: string) {
     if (typeof window === 'undefined') return;
-    const kotNo = order.id.slice(0, 4).toUpperCase();
-    const tableNo = order.restaurant_tables?.table_no ?? '?';
+    const tableNo = order.restaurant_tables?.table_no ?? (order.table_id ? '?' : 'Takeaway');
     const customerName = order.customer_name ?? 'Guest';
-    const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN');
+    const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const kotNo = order.id.slice(-4).toUpperCase();
+
+    if (printerName) {
+        const kotCommands = buildKOTCommands({
+            ticketNo: kotNo,
+            tableNo: order.token_no ? `Token #${order.token_no}` : `T-${tableNo}`,
+            orderType: order.source || 'Dine-In',
+            date: `${new Date().toLocaleDateString()} ${timeStr}`,
+            items: (order.order_items || []).map(i => ({
+                name: i.menu_items?.name ?? 'Unknown Item',
+                qty: i.qty,
+                notes: i.notes
+            }))
+        });
+
+        const res = await printThermalReceipt(printerName, kotCommands);
+        if (res.success) return;
+    }
 
     const printContent = `
+    <!DOCTYPE html>
     <html>
     <head>
       <title>KOT #${kotNo}</title>
       <style>
         @media print {
-          body { font-family: monospace; width: 80mm; margin: 0; padding: 8px; }
+          @page { size: 80mm auto; margin: 0; }
+          body { width: 80mm; padding: 8px; font-family: monospace; font-size: 12px; color: #000; }
           .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
           .hotel-name { font-size: 18px; font-weight: bold; }
           .kot-no { font-size: 14px; margin: 4px 0; font-weight: bold; }

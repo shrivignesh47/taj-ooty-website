@@ -78,8 +78,17 @@ export interface AttendanceLog {
     staff_name: string;
 }
 
-export type MainView = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders' | 'stock_inventory';
-export type PayMethod = 'cash' | 'card' | 'upi';
+export type MainView = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders' | 'stock_inventory' | 'kitchen_tickets' | 'staff_roster' | 'crm_customers' | 'table_config' | 'gst_settings';
+export type PayMethod = 'cash' | 'card' | 'upi' | 'split';
+
+export interface ActiveStaffUser {
+    id: string;
+    name: string;
+    roleName: string;
+    permissions: string[];
+    phone?: string | null;
+    auth_id?: string | null;
+}
 
 export interface BillingWorkspaceNavProps {
     activeView: MainView;
@@ -88,5 +97,5 @@ export interface BillingWorkspaceNavProps {
     activeTableCount: number;
     pendingSettlementCount: number;
     onlineOrderCount: number;
-    stats: Pick<DayStats, 'revenue' | 'bills'>;
+    stats?: any;
 }
