@@ -85,9 +85,6 @@ export function buildReceiptCommands(bill: BillReceiptData): string[] {
         cmds.push(`Points Earned  : +${bill.pointsEarned}` + lineFeed());
     }
     cmds.push(`Taxable   : ₹${bill.taxableAmount.toFixed(2)}` + lineFeed());
-    if (bill.serviceCharge > 0) {
-        cmds.push(`Service   : ₹${bill.serviceCharge.toFixed(2)}` + lineFeed());
-    }
     cmds.push(`CGST 2.5% : ₹${bill.cgst.toFixed(2)}` + lineFeed());
     cmds.push(`SGST 2.5% : ₹${bill.sgst.toFixed(2)}` + lineFeed());
     cmds.push(boldOn(), doubleHeight());

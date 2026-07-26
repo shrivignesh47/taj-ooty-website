@@ -392,11 +392,6 @@ export function BillingCheckout({
                                         <div className="flex justify-between text-[#4E1414]/70 border-b border-[#C9974A]/10 pb-1.5 mb-1">
                                             <span>Taxable Amount</span><span>₹{taxableAmount.toFixed(0)}</span>
                                         </div>
-                                        {settings.chargeServiceTax && (
-                                            <div className="flex justify-between text-[#4E1414]/70">
-                                                <span>Service Charge ({settings.serviceChargeRate}%)</span><span>₹{service.toFixed(0)}</span>
-                                            </div>
-                                        )}
                                         <div className="flex justify-between text-[#4E1414]/70">
                                             <span>CGST ({(settings.gstRate / 2)}%)</span>
                                             <span>₹{cgst.toFixed(0)}</span>

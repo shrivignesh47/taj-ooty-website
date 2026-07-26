@@ -15,6 +15,7 @@ import { AdminStaff } from '@/app/staff/admin/components/AdminStaff';
 import { AdminTablesLive } from '@/app/staff/admin/components/AdminTablesLive';
 import { AdminExport } from '@/app/staff/admin/components/AdminExport';
 import { AdminCRM } from '@/app/staff/admin/components/AdminCRM';
+import { KitchenDash } from '@/app/staff/kitchen/KitchenDash';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import { simulateOnlineOrder } from '@/features/ordering/actions/adminActions';
 import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
@@ -259,6 +260,171 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 {s.menuItemsList.length === 0 && (
                                     <p className="col-span-full text-center py-16 text-gray-400 text-sm italic">No menu items loaded.</p>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {s.view === 'kitchen_tickets' && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                                <div>
+                                    <h2 className="font-extrabold text-lg text-[#4E1414]">Live Kitchen Tickets KDS Monitor</h2>
+                                    <p className="text-xs text-gray-500">Real-time KOT orders, preparation timers &amp; station bump controls.</p>
+                                </div>
+                                <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Dashboard</button>
+                            </div>
+                            <KitchenDash />
+                        </div>
+                    )}
+
+                    {s.view === 'staff_roster' && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                                <div>
+                                    <h2 className="font-extrabold text-lg text-[#4E1414]">Staff Roster &amp; Shift Attendance Log</h2>
+                                    <p className="text-xs text-gray-500">Manage staff team members, role permissions, and clock-in logs.</p>
+                                </div>
+                                <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Dashboard</button>
+                            </div>
+                            <AdminStaff staff={s.staffList} roles={s.rolesList} onStaffUpdated={s.loadData} />
+                        </div>
+                    )}
+
+                    {s.view === 'crm_customers' && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                                <div>
+                                    <h2 className="font-extrabold text-lg text-[#4E1414]">Guests CRM Identity Ledger</h2>
+                                    <p className="text-xs text-gray-500">Customer loyalty point balances, visit count history, and lifetime value.</p>
+                                </div>
+                                <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Dashboard</button>
+                            </div>
+                            <AdminCRM customers={s.guests} orders={[...s.activeOrders, ...s.history]} settings={s.settings} />
+                        </div>
+                    )}
+
+                    {s.view === 'table_config' && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#C9974A]/20 shadow-sm">
+                                <div>
+                                    <h2 className="font-extrabold text-lg text-[#4E1414]">Physical Table Configuration</h2>
+                                    <p className="text-xs text-gray-500">Add physical restaurant tables, generate QR codes, and assign waiters.</p>
+                                </div>
+                                <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Dashboard</button>
+                            </div>
+                            <AdminTablesLive
+                                onTableClick={(t) => {
+                                    const cashierTable = s.tables.find(x => x.id === t.id);
+                                    if (cashierTable) s.handleSelectTable(cashierTable);
+                                }}
+                                readOnly={false}
+                            />
+                        </div>
+                    )}
+
+                    {s.view === 'gst_settings' && (
+                        <div className="space-y-5 bg-white border border-[#C9974A]/20 rounded-2xl p-6 shadow-sm">
+                            <div className="flex justify-between items-center pb-4 border-b border-[#C9974A]/20">
+                                <div>
+                                    <h2 className="font-extrabold text-xl text-[#4E1414] flex items-center gap-2">
+                                        <Settings className="w-5 h-5 text-[#C9974A]" /> GST Tax Configuration
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mt-1">Configure restaurant GST tax rates, tax computation mode, and invoice notes.</p>
+                                </div>
+                                <button onClick={() => s.setView('bento')} className="text-xs text-[#C9974A] hover:underline font-bold">← Back to Dashboard</button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                                {/* Tax Mode */}
+                                <div className="bg-[#F6EEDF]/20 p-5 rounded-2xl border border-[#C9974A]/30 space-y-4">
+                                    <h3 className="font-extrabold text-sm text-[#4E1414] uppercase tracking-wide">GST Tax Calculation Mode</h3>
+                                    
+                                    <div className="space-y-3">
+                                        <label className="flex items-start gap-3 p-3 bg-white border rounded-xl border-[#C9974A]/30 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="gstMode"
+                                                checked={!s.settings.isGstInclusive}
+                                                onChange={() => s.setSettings(prev => ({ ...prev, isGstInclusive: false }))}
+                                                className="mt-1 text-[#4E1414] focus:ring-[#C9974A]"
+                                            />
+                                            <div>
+                                                <span className="font-bold text-xs text-[#4E1414]">GST Exclusive (Added at Checkout)</span>
+                                                <p className="text-[11px] text-gray-500 mt-0.5">GST is calculated and added on top of item prices during bill settlement.</p>
+                                            </div>
+                                        </label>
+
+                                        <label className="flex items-start gap-3 p-3 bg-white border rounded-xl border-[#C9974A]/30 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="gstMode"
+                                                checked={s.settings.isGstInclusive}
+                                                onChange={() => s.setSettings(prev => ({ ...prev, isGstInclusive: true }))}
+                                                className="mt-1 text-[#4E1414] focus:ring-[#C9974A]"
+                                            />
+                                            <div>
+                                                <span className="font-bold text-xs text-[#4E1414]">GST Inclusive (Included in Price)</span>
+                                                <p className="text-[11px] text-gray-500 mt-0.5">Menu item prices already include GST. Tax is extracted automatically on invoices.</p>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <label className="block text-xs font-bold text-[#4E1414] mb-1.5">Standard GST Tax Rate (%)</label>
+                                        <div className="flex gap-2">
+                                            {[5, 12, 18].map(rate => (
+                                                <button
+                                                    key={rate}
+                                                    type="button"
+                                                    onClick={() => s.setSettings(prev => ({ ...prev, gstRate: rate }))}
+                                                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${s.settings.gstRate === rate ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-white border border-[#C9974A]/40 text-gray-700 hover:bg-[#F6EEDF]/40'}`}
+                                                >
+                                                    {rate}% GST
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Receipt Notes */}
+                                <div className="bg-[#F6EEDF]/20 p-5 rounded-2xl border border-[#C9974A]/30 space-y-4">
+                                    <h3 className="font-extrabold text-sm text-[#4E1414] uppercase tracking-wide">Receipt Invoice Header &amp; Footer</h3>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-[#4E1414] mb-1">Restaurant Header Note</label>
+                                        <input
+                                            type="text"
+                                            value={s.settings.headerNote || ''}
+                                            onChange={e => s.setSettings(prev => ({ ...prev, headerNote: e.target.value }))}
+                                            className="w-full bg-white border border-[#C9974A]/40 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-[#4E1414] mb-1">Invoice Footer Terms &amp; Note</label>
+                                        <input
+                                            type="text"
+                                            value={s.settings.footerNote || ''}
+                                            onChange={e => s.setSettings(prev => ({ ...prev, footerNote: e.target.value }))}
+                                            className="w-full bg-white border border-[#C9974A]/40 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="pt-3 flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                if (s.restaurantSettings?.id) {
+                                                    await s.setSettings({ ...s.settings });
+                                                    alert('GST Tax Settings saved successfully!');
+                                                }
+                                            }}
+                                            className="px-6 py-2.5 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold text-xs rounded-xl shadow transition-all cursor-pointer"
+                                        >
+                                            Save GST Tax Settings
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

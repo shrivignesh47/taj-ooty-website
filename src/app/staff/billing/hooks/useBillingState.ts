@@ -108,11 +108,11 @@ export function useBillingState(activeUser: any) {
         printerSize: '80mm',
         autoPrint: false,
         gstRate: 5,
-        serviceChargeRate: 5,
+        serviceChargeRate: 0,
         headerNote: 'HOTEL TAJ OOTY',
         footerNote: 'Thank you! Visit again.',
         isGstInclusive: false,
-        chargeServiceTax: true,
+        chargeServiceTax: false,
     });
 
     const [activeOpModal, setActiveOpModal] = useState<string | null>(null);
@@ -542,7 +542,6 @@ ${calc.allItems.map(i => {
 ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(2)}</span></div>` : ''}
 ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem} pts)</span><span>-₹${calc.loyaltyDiscount.toFixed(2)}</span></div>` : ''}
 <div class="row"><span>Taxable Amount</span><span>₹${calc.taxableAmount.toFixed(2)}</span></div>
-${calc.service > 0 ? `<div class="row"><span>Service Charge (${settings.serviceChargeRate}%)</span><span>₹${calc.service.toFixed(2)}</span></div>` : ''}
 <div class="row"><span>CGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.cgst.toFixed(2)}</span></div>
 <div class="row"><span>SGST (${(settings.gstRate / 2)}%)</span><span>₹${calc.sgst.toFixed(2)}</span></div>
 <div class="sep"></div>
@@ -668,26 +667,23 @@ ${calc.service > 0 ? `<div class="row"><span>Service Charge (${settings.serviceC
     };
 
     const handleSidebarAction = (actionId: string, permKey: string) => {
-        if (!hasPerm(permKey)) {
-            triggerPermissionDenied(permKey);
-            return;
-        }
         setIsSidebarOpen(false);
-        if (actionId === 'Dashboard') setView('bento');
-        else if (actionId === 'tables') setView('tables');
-        else if (actionId === 'takeaway') setView('takeaway');
-        else if (actionId === 'online_orders') setView('online_orders');
-        else if (actionId === 'history') setView('history');
-        else if (actionId === 'reports') setView('reports');
-        else if (actionId === 'Kitchen Tickets') setView('kitchen_tickets');
-        else if (actionId === 'stock_inventory') setView('stock_inventory');
-        else if (actionId === 'Staff Roster') setView('staff_roster');
-        else if (actionId === 'CRM Customers') setView('crm_customers');
-        else if (actionId === 'Table Configuration') setView('table_config');
-        else if (actionId === 'GST Settings') setView('gst_settings');
-        else if (actionId === 'Drawer Session') setActiveOpModal('drawer_session');
-        else if (actionId === 'Petty Expenses') setActiveOpModal('petty_expenses');
-        else if (actionId === 'Export') setActiveOpModal('export');
+        const lowerId = (actionId || '').toLowerCase();
+        if (lowerId.includes('dashboard') || lowerId === 'bento') setView('bento');
+        else if (lowerId.includes('floor') || lowerId === 'tables') setView('tables');
+        else if (lowerId.includes('takeaway')) setView('takeaway');
+        else if (lowerId.includes('online') || lowerId === 'online_orders') setView('online_orders');
+        else if (lowerId.includes('kitchen') || lowerId === 'kitchen_tickets') setView('kitchen_tickets');
+        else if (lowerId.includes('stock') || lowerId === 'stock_inventory') setView('stock_inventory');
+        else if (lowerId.includes('staff') || lowerId === 'staff_roster') setView('staff_roster');
+        else if (lowerId.includes('invoice') || lowerId.includes('history') || lowerId === 'history') setView('history');
+        else if (lowerId.includes('report') || lowerId === 'reports') setView('reports');
+        else if (lowerId.includes('crm') || lowerId.includes('guest') || lowerId === 'crm_customers') setView('crm_customers');
+        else if (lowerId.includes('table') || lowerId === 'table_config') setView('table_config');
+        else if (lowerId.includes('gst') || lowerId === 'gst_settings') setView('gst_settings');
+        else if (lowerId.includes('drawer') || actionId === 'Drawer Session') setActiveOpModal('drawer_session');
+        else if (lowerId.includes('petty') || actionId === 'Petty Expenses') setActiveOpModal('petty_expenses');
+        else if (lowerId.includes('export') || actionId === 'Export') setActiveOpModal('export');
     };
 
     const handleOpenSession = async (floatAmount: number) => {
