@@ -69,6 +69,8 @@ export interface OrderItem {
     qty: number;
     notes: string | null;
     price_at_order: number;
+    discount_percent?: number | null;
+    discount_reason?: string | null;
 }
 
 export interface OrderStatusHistory {

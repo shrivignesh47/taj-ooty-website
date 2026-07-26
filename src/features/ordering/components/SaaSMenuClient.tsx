@@ -6,7 +6,6 @@ import { useCartStore } from '../store/useCartStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus, Search, ShoppingBag, X, Loader2 } from 'lucide-react';
 import { CustomerOrderStatus } from './CustomerOrderStatus';
-import { supabase } from '../lib/supabase';
 import { getOrCreateTableAndCheckOccupied } from '../actions/waiterActions';
 
 export function SaaSMenuClient({ catalog, initialTableNo }: { catalog: MenuCatalog, initialTableNo?: number }) {
@@ -327,7 +326,7 @@ function CartBadge() {
 // -------------------------------------------------------------
 // Compact Mobile Item Row
 // -------------------------------------------------------------
-function CompactMobileItemRow({ item }: { item: any }) {
+function CompactMobileItemRow({ item }: { item: MenuCatalog['menuItems'][0] }) {
     const items = useCartStore((state) => state.items);
     const addItem = useCartStore((state) => state.addItem);
     const updateQty = useCartStore((state) => state.updateQty);

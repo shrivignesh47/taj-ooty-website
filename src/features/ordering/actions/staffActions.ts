@@ -37,8 +37,8 @@ export async function addStaffUser(name: string, phone: string, email: string, r
 
         revalidatePath('/staff/admin');
         return { success: true, password }; // return once
-    } catch (e: any) {
-        return { success: false, error: e.message || 'Server Action Exception' };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Server Action Exception' };
     }
 }
 
@@ -54,8 +54,8 @@ export async function editStaffUser(id: string, name: string, phone: string, rol
         if (error) return { success: false, error: error.message };
         revalidatePath('/staff/admin');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Operation failed' };
     }
 }
 
@@ -139,7 +139,7 @@ export async function updateStaffSelf(id: string, name: string, phone: string) {
         if (error) return { success: false, error: error.message };
         revalidatePath('/staff/orders');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Operation failed' };
     }
 }

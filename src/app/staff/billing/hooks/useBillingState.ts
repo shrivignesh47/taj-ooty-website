@@ -115,13 +115,13 @@ export function useBillingState(activeUser: any) {
             supabase.from('orders')
                 .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
                     restaurant_tables(id, table_no),
-                    order_items(id, qty, price_at_order, notes, menu_items(name, is_veg, id))`)
+                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(name, is_veg, id))`)
                 .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served'])
                 .order('created_at', { ascending: true }),
             supabase.from('orders')
                 .select(`id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
                     restaurant_tables(id, table_no),
-                    order_items(id, qty, price_at_order, notes, menu_items(name, is_veg, id))`)
+                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(name, is_veg, id))`)
                 .eq('status', 'billed')
                 .order('created_at', { ascending: false })
                 .limit(100),
@@ -211,8 +211,7 @@ export function useBillingState(activeUser: any) {
 
         const enriched: TableView[] = rawTables.map((t: any) => {
             const tOrders = activeDineIn.filter(o => o.table_id === t.id);
-            const bill = tOrders.reduce((s, o) =>
-                s + o.order_items.reduce((ss, i) => ss + i.price_at_order * i.qty, 0), 0);
+            const bill = tOrders.reduce((s, o) => s + orderTotal(o), 0);
 
             let status: TableView['status'] = 'Empty';
             if (tOrders.length > 0) {
@@ -385,16 +384,25 @@ export function useBillingState(activeUser: any) {
     };
 
     const getCheckoutCalculation = (t: TableView) => {
-        const allItems: { name: string; qty: number; price: number; is_veg: boolean }[] = [];
+        const allItems: { id?: string; name: string; qty: number; price: number; is_veg: boolean; discount_percent?: number | null; discount_reason?: string | null; effectivePrice: number }[] = [];
         t.orders.forEach(o => {
             o.order_items.forEach(i => {
-                const existing = allItems.find(x => x.name === (i.menu_items?.name ?? ''));
-                if (existing) { existing.qty += i.qty; }
-                else { allItems.push({ name: i.menu_items?.name ?? 'Item', qty: i.qty, price: i.price_at_order, is_veg: i.menu_items?.is_veg ?? false }); }
+                const disc = (i.discount_percent && Number(i.discount_percent) > 0) ? Number(i.discount_percent) : 0;
+                const effPrice = i.price_at_order * (1 - disc / 100);
+                allItems.push({
+                    id: i.id,
+                    name: i.menu_items?.name ?? 'Item',
+                    qty: i.qty,
+                    price: i.price_at_order,
+                    is_veg: i.menu_items?.is_veg ?? false,
+                    discount_percent: i.discount_percent,
+                    discount_reason: i.discount_reason,
+                    effectivePrice: effPrice
+                });
             });
         });
 
-        const subtotal = allItems.reduce((s, i) => s + i.price * i.qty, 0);
+        const subtotal = allItems.reduce((s, i) => s + i.effectivePrice * i.qty, 0);
         const discountAmt = discountType === 'amt' 
             ? Math.min(discountValue, subtotal)
             : Math.min((subtotal * discountValue) / 100, subtotal);
@@ -451,6 +459,7 @@ export function useBillingState(activeUser: any) {
   .sep{border-top:1px dashed #000;margin:6px 0}
   .row{display:flex;justify-content:space-between;margin:2px 0}
   .bold{font-weight:700}.big{font-size:14px;font-weight:900}
+  .disc-tag{font-size:9px;color:#444;font-style:italic}
 </style></head>
 <body>
 <h1>${settings.headerNote}</h1>
@@ -461,7 +470,17 @@ export function useBillingState(activeUser: any) {
 <div class="sep"></div>
 <div class="row bold"><span>Item</span><span>Qty × Rate</span><span>Amt</span></div>
 <div class="sep"></div>
-${calc.allItems.map(i => `<div class="row"><span>${i.name}</span><span>${i.qty}×${i.price}</span><span>₹${(i.qty * i.price).toFixed(0)}</span></div>`).join('')}
+${calc.allItems.map(i => {
+    const hasDisc = i.discount_percent && Number(i.discount_percent) > 0;
+    const origTotal = i.qty * i.price;
+    const finalTotal = i.qty * i.effectivePrice;
+    return `
+    <div class="row">
+      <span>${i.name}${hasDisc ? ` <br/><span class="disc-tag">(${i.discount_percent}% off - ${i.discount_reason || 'Comp'})</span>` : ''}</span>
+      <span>${i.qty}×${i.price}</span>
+      <span>${hasDisc ? `₹${origTotal.toFixed(0)} → ₹${finalTotal.toFixed(0)}` : `₹${origTotal.toFixed(0)}`}</span>
+    </div>`;
+}).join('')}
 <div class="sep"></div>
 <div class="row"><span>Subtotal</span><span>₹${calc.subtotal.toFixed(0)}</span></div>
 ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc.discountAmt.toFixed(0)}</span></div>` : ''}
@@ -579,8 +598,14 @@ ${calc.discountAmt > 0 ? `<div class="row"><span>Discount</span><span>-₹${calc
             return;
         }
         setIsSidebarOpen(false);
-        if (['bento', 'tables', 'takeaway', 'history', 'reports', 'online_orders', 'stock_inventory'].includes(actionId)) {
+        if (actionId === 'Dashboard' || actionId === 'bento') {
+            setView('bento');
+            setSelectedTable(null);
+        } else if (['tables', 'takeaway', 'history', 'reports', 'online_orders', 'stock_inventory'].includes(actionId)) {
             setView(actionId as MainView);
+            setSelectedTable(null);
+        } else if (actionId === 'Kitchen Tickets') {
+            setView('bento');
         } else {
             setActiveOpModal(actionId);
         }

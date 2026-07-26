@@ -1,0 +1,1 @@
+SELECT r.name as role_name, p.key as perm_key FROM role_permissions rp join roles r on r.id = rp.role_id join permissions p on p.id = rp.permission_id;

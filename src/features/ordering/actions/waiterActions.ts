@@ -244,7 +244,12 @@ export async function submitWaiterOrder(
                 waiter_id: waiterId
             }]).select().single();
 
-            if (orderErr) throw orderErr;
+            if (orderErr) {
+                if (orderErr.code === '23505') {
+                    return { success: false, error: 'This table already has an active order' };
+                }
+                throw orderErr;
+            }
             orderId = order.id;
 
             const orderItemsPayload = items.map(item => ({
@@ -347,7 +352,9 @@ export async function deleteOrderItem(orderItemId: string) {
 
 export async function getOrCreateTableAndCheckOccupied(tableNo: number) {
     try {
-        if (isNaN(tableNo) || tableNo <= 0) return { success: false, error: 'Invalid table number' };
+        if (typeof tableNo !== 'number' || isNaN(tableNo) || tableNo < 1 || tableNo > 100 || !Number.isInteger(tableNo)) {
+            return { success: false, error: 'Invalid table number' };
+        }
 
         // 1. Find if table exists
         const { data: tables, error: tableErr } = await adminEdge
@@ -401,6 +408,9 @@ export async function getOrCreateTableAndCheckOccupied(tableNo: number) {
 
         return { success: true, tableNo, tableId, hasActiveOrder: false };
     } catch (e: any) {
+        if (e?.code === '23505' || e?.message?.includes('23505') || e?.message?.includes('idx_one_active_order_per_table')) {
+            return { success: false, error: 'This table already has an active order' };
+        }
         return { success: false, error: e.message };
     }
 }

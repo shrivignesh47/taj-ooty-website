@@ -3,6 +3,8 @@ export interface CashierOrderItem {
     qty: number;
     price_at_order: number;
     notes?: string | null;
+    discount_percent?: number | null;
+    discount_reason?: string | null;
     menu_items: { name: string; is_veg: boolean; id: string } | null;
 }
 

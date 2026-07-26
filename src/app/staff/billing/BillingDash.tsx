@@ -64,6 +64,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                 setRefreshing={s.setRefreshing} 
                 loadData={s.loadData} 
                 logoutStaff={logoutStaff} 
+                onGoHome={() => { s.setView('bento'); s.setSelectedTable(null); }}
             />
 
             {/* ── Main Viewport Content ── */}
@@ -79,6 +80,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             menuItemsList={s.menuItemsList}
                             handleToggleItemStock={s.handleToggleItemStock}
                             activeOrders={s.activeOrders}
+                            takeawayOrders={s.takeawayOrders}
                             attendanceStaffId={s.attendanceStaffId}
                             setAttendanceStaffId={s.setAttendanceStaffId}
                             staffList={s.staffList}
@@ -92,6 +94,8 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             handleSidebarAction={s.handleSidebarAction}
                             history={s.history}
                             handleOpenSession={s.handleOpenSession}
+                            setView={s.setView}
+                            loadData={s.loadData}
                         />
                     )}
                     {s.view === 'tables' && (
@@ -281,6 +285,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                         handleSettlePayment={s.handleSettlePayment}
                         getCheckoutCalculation={s.getCheckoutCalculation}
                         handleApplyCoupon={s.handleApplyCoupon}
+                        loadData={s.loadData}
                     />
 
                     {/* Swiggy & Zomato Realtime Notification Bento Card */}

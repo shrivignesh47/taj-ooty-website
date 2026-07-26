@@ -35,11 +35,11 @@ export async function verifyStaff() {
 
     if (!staffMember) return { success: false };
 
-    const roleData: any = staffMember.roles;
+    const roleData = staffMember.roles as { name?: string; role_permissions?: { permissions?: { key: string } }[] } | null | undefined;
     const permissions = new Set<string>();
 
     if (roleData?.role_permissions) {
-        roleData.role_permissions.forEach((rp: any) => {
+        roleData.role_permissions.forEach((rp: { permissions?: { key: string } }) => {
             if (rp.permissions?.key) permissions.add(rp.permissions.key);
         });
     }
@@ -98,7 +98,7 @@ export async function loginStaff(formData: FormData) {
                 .eq('auth_id', user.id)
                 .single();
 
-            const roleData: any = staffMember?.roles;
+            const roleData = staffMember?.roles as { name?: string; role_permissions?: { permissions?: { key: string } }[] } | null | undefined;
             const roleName = roleData?.name?.toLowerCase() ?? '';
             const permSet = new Set<string>();
 
@@ -107,7 +107,7 @@ export async function loginStaff(formData: FormData) {
                 const { data: allPerms } = await supabaseAdminEdge.from('permissions').select('key');
                 allPerms?.forEach(p => permSet.add(p.key));
             } else if (roleData?.role_permissions) {
-                roleData.role_permissions.forEach((rp: any) => {
+                roleData.role_permissions.forEach((rp: { permissions?: { key: string } }) => {
                     if (rp.permissions?.key) permSet.add(rp.permissions.key);
                 });
             }
@@ -152,8 +152,8 @@ export async function loginStaff(formData: FormData) {
         }
 
         return { success: true, redirectUrl: '/staff/billing' }; // Changed default to billing/orders rather than station hub
-    } catch (e: any) {
-        return { error: e.message || 'Internal error during login' };
+    } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : 'Internal error during login' };
     }
 }
 

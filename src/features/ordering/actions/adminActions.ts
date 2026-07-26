@@ -122,7 +122,7 @@ export async function deleteMenuItem(id: string) {
 
 export async function addMenuItem(name: string, price: number, category: string) {
      
-    let cat: any = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
+    let cat: { id: string; sort_order: number } | null = (await admin.from('categories').select('id, sort_order').ilike('name', category).single()).data;
     if (!cat) {
         const { data: maxSort } = await admin.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
         const nextOrder = (maxSort?.sort_order ?? 0) + 1;
@@ -169,7 +169,7 @@ export async function bulkAddMenuItems(items: { name: string, price: number, cat
     );
 
     // 5. Filter out incoming items that already exist
-    const itemsToInsert: any[] = [];
+    const itemsToInsert: { name: string; price: number; category_id: string; is_available: boolean }[] = [];
     for (const item of items) {
         const catId = catMap.get(item.category.toLowerCase());
         const key = `${item.name.toLowerCase().trim()}_${catId}`;
@@ -199,7 +199,7 @@ export async function bulkAddMenuItems(items: { name: string, price: number, cat
 
 // ─── Activity Log ────────────────────────────────────────────────────────────
 
-export async function logAuditActivity(staffId: string | null, action: string, details?: any) {
+export async function logAuditActivity(staffId: string | null, action: string, details?: Record<string, unknown>) {
     try {
         await admin.from('staff_activity_log').insert({
             staff_id: staffId,
@@ -483,8 +483,8 @@ export async function simulateOnlineOrder(source: 'swiggy' | 'zomato') {
 
         revalidatePath('/staff/dashboard');
         return { success: true };
-    } catch (err: any) {
-        return { success: false, error: err.message };
+    } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : 'Operation failed' };
     }
 }
 
@@ -537,7 +537,49 @@ export async function createTakeawayOrder(payload: {
         revalidatePath('/staff/dashboard');
         revalidatePath('/staff/kitchen');
         return { success: true, orderId: order.id };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Operation failed' };
     }
 }
+
+export async function applyOrderItemDiscount(orderItemId: string, discountPercent: number, discountReason: string) {
+    const auth = await verifyStaff();
+    if (!auth.success || !auth.user) {
+        return { success: false, error: 'Unauthorized Session' };
+    }
+
+    const hasPerm = auth.user.permissions.some(p => ['generate_bills', 'manage_staff', 'view_billing', 'manage_orders'].includes(p));
+    if (!hasPerm) {
+        return { success: false, error: 'Permission denied. Staff requires billing permission to apply discounts.' };
+    }
+
+    if (discountPercent < 0 || discountPercent > 100) {
+        return { success: false, error: 'Discount percent must be between 0% and 100%' };
+    }
+
+    try {
+        const { error } = await admin
+            .from('order_items')
+            .update({
+                discount_percent: discountPercent,
+                discount_reason: discountReason || 'Manager Comp'
+            })
+            .eq('id', orderItemId);
+
+        if (error) throw error;
+
+        // Log audit entry in staff_activity_log for fraud prevention
+        await logAuditActivity(auth.user.id, 'APPLY_ITEM_DISCOUNT', {
+            orderItemId,
+            discountPercent,
+            discountReason
+        });
+
+        revalidatePath('/staff/billing');
+        revalidatePath('/staff/orders');
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to apply discount' };
+    }
+}
+

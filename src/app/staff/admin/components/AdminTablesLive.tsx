@@ -189,8 +189,9 @@ export function AdminTablesLive({ onTableClick, readOnly = false }: AdminTablesL
     useEffect(() => {
         // eslint-disable-next-line
         loadData();
+        const channelName = `admin-tables-watch-${Math.random()}`;
         const channel = supabase
-            .channel('admin-tables-watch')
+            .channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadData)
             .subscribe();
         return () => { supabase.removeChannel(channel); };

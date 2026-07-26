@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Clock, ChefHat, BellRing, UtensilsCrossed, PlusCircle } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
+import { getOrderStatus } from '../actions/getOrderStatus';
 
 const STATUS_STEPS = [
     { key: 'pending', label: 'Placed', icon: Clock },
@@ -17,17 +18,23 @@ const STATUS_STEPS = [
 export function CustomerOrderStatus({ orderId }: { orderId: string }) {
     const [status, setStatus] = useState<string>('pending');
     const [loading, setLoading] = useState(true);
+    const customer = useCartStore((state) => state.customer);
     const clearActiveOrder = useCartStore((state) => state.clearActiveOrder);
+
+    const customerPhone = customer?.phone;
 
     useEffect(() => {
         let isMounted = true;
         const fetchInitial = async () => {
-            const { data } = await supabase
-                .from('orders')
-                .select('status')
-                .eq('id', orderId)
-                .single();
-            if (data && isMounted) setStatus(data.status);
+            if (!customerPhone) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+
+            const res = await getOrderStatus(orderId, customerPhone);
+            if (res.success && res.order && isMounted) {
+                setStatus(res.order.status);
+            }
             if (isMounted) setLoading(false);
         };
 
@@ -52,7 +59,7 @@ export function CustomerOrderStatus({ orderId }: { orderId: string }) {
             isMounted = false;
             supabase.removeChannel(channel);
         };
-    }, [orderId]);
+    }, [orderId, customerPhone]);
 
     if (loading) {
         return (

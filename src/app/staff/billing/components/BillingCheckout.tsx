@@ -4,9 +4,10 @@ import { useState, Dispatch, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
     Utensils, User, Minus, Plus, Banknote, CreditCard, QrCode, 
-    Printer, Check, Loader2 
+    Printer, Check, Loader2, Tag, Percent, X
 } from 'lucide-react';
 import { fmt } from './utils';
+import { applyOrderItemDiscount } from '@/features/ordering/actions/adminActions';
 
 const PRESET_COUPONS = [
     { code: 'TAJ10', type: 'pct', value: 10, description: '10% Restaurant Special' },
@@ -14,6 +15,8 @@ const PRESET_COUPONS = [
     { code: 'FESTIVE15', type: 'pct', value: 15, description: '15% Festive Occasion Discount' },
     { code: 'VIP200', type: 'amt', value: 200, description: '₹200 Flat VIP Discount' }
 ];
+
+const DISCOUNT_REASONS = ['Complimentary', 'Loyalty Discount', 'Manager Comp', 'Other'];
 
 interface Props {
     selectedTable: any;
@@ -39,6 +42,7 @@ interface Props {
     handleSettlePayment: (table: any) => void;
     getCheckoutCalculation: (table: any) => any;
     handleApplyCoupon: (code: string) => void;
+    loadData?: () => Promise<void>;
 }
 
 export function BillingCheckout({
@@ -64,8 +68,26 @@ export function BillingCheckout({
     handlePrintBill,
     handleSettlePayment,
     getCheckoutCalculation,
-    handleApplyCoupon
+    handleApplyCoupon,
+    loadData
 }: Props) {
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [itemDiscPct, setItemDiscPct] = useState<number>(10);
+    const [itemDiscReason, setItemDiscReason] = useState<string>('Manager Comp');
+    const [savingItemDisc, setSavingItemDisc] = useState<boolean>(false);
+
+    const handleSaveItemDiscount = async (orderItemId: string) => {
+        setSavingItemDisc(true);
+        const res = await applyOrderItemDiscount(orderItemId, itemDiscPct, itemDiscReason);
+        setSavingItemDisc(false);
+        if (!res.success) {
+            alert(res.error);
+        } else {
+            setEditingItemId(null);
+            if (loadData) await loadData();
+        }
+    };
+
     return (
         <div className="bg-white border border-[#C9974A]/30 rounded-3xl p-5 shadow-sm space-y-5 min-h-[380px] flex flex-col justify-between">
             <AnimatePresence mode="wait">
@@ -104,6 +126,112 @@ export function BillingCheckout({
                                         <span>{selectedTable.customer_phone}</span>
                                     </p>
                                 )}
+                            </div>
+
+                            {/* Order Items Breakdown with Item-Level Discount Trigger */}
+                            <div className="bg-[#F6EEDF]/20 border border-[#C9974A]/20 rounded-2xl p-3 space-y-2">
+                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#C9974A]">Order Line Items</p>
+                                <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1 taj-scrollbar-dark">
+                                    {selectedTable.orders?.flatMap((o: any) => o.order_items || []).map((item: any) => {
+                                        const hasDisc = item.discount_percent && Number(item.discount_percent) > 0;
+                                        const origPrice = item.price_at_order * item.qty;
+                                        const finalPrice = origPrice * (1 - (Number(item.discount_percent || 0) / 100));
+                                        const isEditing = editingItemId === item.id;
+
+                                        return (
+                                            <div key={item.id} className="bg-white border border-[#C9974A]/15 rounded-xl p-2.5 space-y-1 text-xs">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className="font-bold text-[#4E1414]">{item.menu_items?.name ?? 'Item'}</span>
+                                                            <span className="text-[10px] text-gray-400">×{item.qty}</span>
+                                                            {hasDisc && (
+                                                                <span className="bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-[9px] px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                                                                    <Tag className="w-2.5 h-2.5" />
+                                                                    {item.discount_percent}% off ({item.discount_reason || 'Comp'})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-right">
+                                                            {hasDisc ? (
+                                                                <div>
+                                                                    <span className="line-through text-gray-400 text-[10px] mr-1">₹{origPrice.toFixed(0)}</span>
+                                                                    <span className="font-black text-green-700">₹{finalPrice.toFixed(0)}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="font-bold text-[#4E1414]">₹{origPrice.toFixed(0)}</span>
+                                                            )}
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                if (isEditing) {
+                                                                    setEditingItemId(null);
+                                                                } else {
+                                                                    setEditingItemId(item.id);
+                                                                    setItemDiscPct(Number(item.discount_percent || 10));
+                                                                    setItemDiscReason(item.discount_reason || 'Manager Comp');
+                                                                }
+                                                            }}
+                                                            title="Apply Item Discount"
+                                                            className="p-1 text-[#C9974A] hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-lg transition-colors cursor-pointer"
+                                                        >
+                                                            <Percent className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Inline Popover for Discount Input */}
+                                                {isEditing && (
+                                                    <div className="mt-2 pt-2 border-t border-[#C9974A]/20 bg-[#F6EEDF]/40 p-2 rounded-lg space-y-2">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-[10px] font-bold text-[#4E1414] uppercase">Item Discount Config</span>
+                                                            <button onClick={() => setEditingItemId(null)} className="text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="text-[9px] font-bold text-gray-500 uppercase">Discount %</label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    value={itemDiscPct}
+                                                                    onChange={e => setItemDiscPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                                                                    className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-2 py-1 text-xs font-bold text-[#4E1414] focus:outline-none"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-[9px] font-bold text-gray-500 uppercase">Reason</label>
+                                                                <select
+                                                                    value={itemDiscReason}
+                                                                    onChange={e => setItemDiscReason(e.target.value)}
+                                                                    className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-1.5 py-1 text-xs font-bold text-[#4E1414] focus:outline-none cursor-pointer"
+                                                                >
+                                                                    {DISCOUNT_REASONS.map(r => (
+                                                                        <option key={r} value={r}>{r}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-end gap-1.5">
+                                                            <button
+                                                                onClick={() => handleSaveItemDiscount(item.id)}
+                                                                disabled={savingItemDisc}
+                                                                className="w-full bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-1 px-3 rounded-lg text-[10px] transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                                            >
+                                                                {savingItemDisc ? <Loader2 className="w-3 h-3 animate-spin text-[#C9974A]" /> : <Check className="w-3 h-3 text-[#C9974A]" />}
+                                                                Apply Item Discount
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             {/* Coupon Discount block */}

@@ -157,7 +157,14 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
             }
             orderId = order.id;
 
-            await insertOrderItems(orderId);
+            try {
+                await insertOrderItems(orderId);
+            } catch (err) {
+                // Roll back: delete the orphaned order since items failed
+                await supabaseAdmin.from('orders').delete().eq('id', orderId);
+                const errMsg = err instanceof Error ? err.message : 'Could not place order. Please try again.';
+                return { success: false, error: errMsg };
+            }
 
             const { error: historyErr } = await supabase
                 .from('order_status_history')

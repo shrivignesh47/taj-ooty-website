@@ -43,7 +43,7 @@ export async function fetchAdminDashboardData() {
             permissions: permsRes.data || [],
             errors: [tablesRes.error, ordersRes.error, staffRes.error, menuRes.error, rolesRes.error, permsRes.error].filter(Boolean)
         };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        return { success: false, error: e instanceof Error ? e.message : 'Operation failed' };
     }
 }
