@@ -37,7 +37,8 @@ export function AdminRoles({ roles, permissions, staff, onRolesUpdated }: Props)
         'view_reports': 'View POS Shift Reports',
         'manage_inventory': 'Toggle Menu Inventory Stock',
         'manage_expenses': 'Manage Petty Cash Expenses',
-        'manage_cash_drawer': 'Manage Cash Register Drawer'
+        'manage_cash_drawer': 'Manage Cash Register Drawer',
+        'manage_loyalty': 'Manage Loyalty Program (Points Config & Members)'
     };
 
     const getAssignedCount = (roleId: string) => staff.filter(s => s.role_id === roleId && s.is_active).length;

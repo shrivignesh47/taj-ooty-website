@@ -212,14 +212,117 @@ export async function logAuditActivity(staffId: string | null, action: string, d
 }
 
 export async function fetchActivityLog() {
-    const { data, error } = await admin
-        .from('staff_activity_log')
-        .select('*, staff_users(name, roles(name))')
-        .order('created_at', { ascending: false })
-        .limit(100);
+    try {
+        const [auditRes, ordersRes, loyaltyRes] = await Promise.all([
+            admin
+                .from('staff_activity_log')
+                .select('*, staff_users(name, roles(name))')
+                .order('created_at', { ascending: false })
+                .limit(100),
+            admin
+                .from('orders')
+                .select('id, created_at, updated_at, status, total_amount, customer_name, table_id')
+                .order('updated_at', { ascending: false })
+                .limit(50),
+            admin
+                .from('loyalty_transactions')
+                .select('id, created_at, customer_phone, type, points, note')
+                .order('created_at', { ascending: false })
+                .limit(50)
+        ]);
 
-    if (error) return { success: false, error: error.message, data: [] };
-    return { success: true, data: data ?? [] };
+        const items: Array<{
+            id: string;
+            created_at: string;
+            action: string;
+            category: 'auth' | 'orders' | 'billing' | 'loyalty' | 'system';
+            staff_name: string;
+            staff_role: string;
+            details: Record<string, unknown>;
+        }> = [];
+
+        // 1. Audit logs
+        if (auditRes.data) {
+            auditRes.data.forEach((row: any) => {
+                const actionUpper = (row.action || '').toUpperCase();
+                let category: 'auth' | 'orders' | 'billing' | 'loyalty' | 'system' = 'system';
+                if (actionUpper.includes('LOGIN') || actionUpper.includes('LOGOUT') || actionUpper.includes('AUTH')) {
+                    category = 'auth';
+                } else if (actionUpper.includes('ORDER') || actionUpper.includes('KITCHEN') || actionUpper.includes('TABLE')) {
+                    category = 'orders';
+                } else if (actionUpper.includes('BILL') || actionUpper.includes('DRAWER') || actionUpper.includes('EXPENSE') || actionUpper.includes('GST')) {
+                    category = 'billing';
+                } else if (actionUpper.includes('LOYALTY')) {
+                    category = 'loyalty';
+                }
+
+                items.push({
+                    id: row.id,
+                    created_at: row.created_at,
+                    action: row.action,
+                    category,
+                    staff_name: row.staff_users?.name ?? 'System Admin',
+                    staff_role: row.staff_users?.roles?.name ?? 'Automaton',
+                    details: row.details ?? {}
+                });
+            });
+        }
+
+        // 2. Orders events (if not already logged)
+        if (ordersRes.data) {
+            ordersRes.data.forEach((ord: any) => {
+                const actName = `ORDER_${(ord.status || 'CREATED').toUpperCase()}`;
+                const isAlreadyLogged = items.some(i => i.details?.order_id === ord.id && i.action === actName);
+                if (!isAlreadyLogged) {
+                    items.push({
+                        id: `ord-${ord.id}`,
+                        created_at: ord.updated_at || ord.created_at,
+                        action: actName,
+                        category: ord.status === 'billed' ? 'billing' : 'orders',
+                        staff_name: ord.customer_name || 'POS Cashier',
+                        staff_role: 'Order System',
+                        details: {
+                            order_id: ord.id,
+                            status: ord.status,
+                            total_amount: ord.total_amount ?? 0,
+                            table_id: ord.table_id ?? 'N/A'
+                        }
+                    });
+                }
+            });
+        }
+
+        // 3. Loyalty events
+        if (loyaltyRes.data) {
+            loyaltyRes.data.forEach((loy: any) => {
+                const actName = `LOYALTY_${(loy.type || 'TRANSACTION').toUpperCase()}`;
+                const isAlreadyLogged = items.some(i => i.details?.loyalty_tx_id === loy.id);
+                if (!isAlreadyLogged) {
+                    items.push({
+                        id: `loy-${loy.id}`,
+                        created_at: loy.created_at,
+                        action: actName,
+                        category: 'loyalty',
+                        staff_name: loy.customer_phone ? `Customer ${loy.customer_phone}` : 'System Admin',
+                        staff_role: 'Loyalty Program',
+                        details: {
+                            loyalty_tx_id: loy.id,
+                            points: loy.points,
+                            type: loy.type,
+                            note: loy.note || ''
+                        }
+                    });
+                }
+            });
+        }
+
+        // Sort unified timeline descending by timestamp
+        items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        return { success: true, data: items.slice(0, 150) };
+    } catch (e: unknown) {
+        return { success: false, error: String(e), data: [] };
+    }
 }
 
 export async function logStaffLogin(staffId: string) {

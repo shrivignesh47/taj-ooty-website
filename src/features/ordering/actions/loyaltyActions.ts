@@ -235,3 +235,44 @@ export async function saveLoyaltySettings(
         return { success: false, error: String(e) };
     }
 }
+
+export async function adminAdjustLoyaltyPoints(
+    phone: string,
+    points: number,
+    note: string
+): Promise<{ success: boolean; newBalance: number; error?: string }> {
+    const cleanPhone = phone.trim();
+    if (!cleanPhone || points === 0) {
+        return { success: false, newBalance: 0, error: 'Invalid parameters' };
+    }
+    try {
+        const { data: cust } = await supabaseAdmin
+            .from('customer_loyalty')
+            .select('points_balance, lifetime_points_earned')
+            .eq('customer_phone', cleanPhone)
+            .maybeSingle();
+
+        const currentBalance = Number(cust?.points_balance || 0);
+        const newBalance = Math.max(0, currentBalance + points);
+        const absPoints = Math.abs(points);
+
+        await supabaseAdmin.from('customer_loyalty').upsert({
+            customer_phone: cleanPhone,
+            points_balance: newBalance,
+            lifetime_points_earned: points > 0
+                ? (Number(cust?.lifetime_points_earned || 0) + absPoints)
+                : Number(cust?.lifetime_points_earned || 0),
+        }, { onConflict: 'customer_phone' });
+
+        await supabaseAdmin.from('loyalty_transactions').insert({
+            customer_phone: cleanPhone,
+            type: points > 0 ? 'earned' : 'adjusted',
+            points: absPoints,
+            note: note || 'Manual admin adjustment',
+        });
+
+        return { success: true, newBalance };
+    } catch (e: unknown) {
+        return { success: false, newBalance: 0, error: String(e) };
+    }
+}

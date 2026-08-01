@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList, ChevronLeft, ChevronDown } from 'lucide-react';
+import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList, ChevronLeft, ChevronDown, Gift } from 'lucide-react';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -22,6 +22,7 @@ import { AdminAnalytics } from './components/AdminAnalytics';
 import { AdminSettings } from './components/AdminSettings';
 import { AdminExport } from './components/AdminExport';
 import { AdminGSTConfig } from './components/AdminGSTConfig';
+import { AdminLoyalty } from './components/AdminLoyalty';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const NAV_TABS = [
@@ -35,6 +36,7 @@ const NAV_TABS = [
     { id: 'Analytics', label: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'Export', label: 'Export', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'GSTConfig', label: 'GST Config', icon: <Settings className="w-4 h-4" /> },
+    { id: 'Loyalty', label: 'Loyalty Program', icon: <Gift className="w-4 h-4" /> },
     { id: 'Activity', label: 'Activity Log', icon: <ClipboardList className="w-4 h-4" /> },
     { id: 'Settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
 ];
@@ -53,7 +55,7 @@ const TAB_GROUPS = [
     {
         key: 'system',
         label: 'System & Analytics',
-        tabs: ['Analytics', 'Export', 'GSTConfig', 'Activity', 'Settings']
+        tabs: ['Analytics', 'Export', 'GSTConfig', 'Loyalty', 'Activity', 'Settings']
     }
 ];
 
@@ -286,6 +288,7 @@ export function AdminDash() {
             case 'Activity':  return hasPerm('view_activity_log')|| hasPerm('manage_staff');
             case 'Export':    return hasPerm('view_revenue')    || hasPerm('manage_staff');
             case 'GSTConfig': return hasPerm('manage_gst')      || hasPerm('manage_roles');
+            case 'Loyalty':   return hasPerm('manage_loyalty')   || hasPerm('manage_roles') || hasPerm('manage_staff');
             case 'Settings':  return hasPerm('manage_staff')    || hasPerm('manage_roles');
             default:          return true;
         }
@@ -525,6 +528,11 @@ export function AdminDash() {
                         {activeTab === 'GSTConfig' && (
                             <motion.div key="gst" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
                                 <AdminGSTConfig />
+                            </motion.div>
+                        )}
+                        {activeTab === 'Loyalty' && (
+                            <motion.div key="loyalty" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>
+                                <AdminLoyalty />
                             </motion.div>
                         )}
                         {activeTab === 'Export' && (

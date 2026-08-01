@@ -76,7 +76,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
             <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
                 {/* Left Area - Bento Dashboard Grid OR expanded list views */}
-                <div className="lg:col-span-8 space-y-6">
+                <div className={(['kitchen_tickets', 'staff_roster', 'crm_customers', 'table_config', 'gst_settings'].includes(s.view) ? 'lg:col-span-12' : 'lg:col-span-8') + ' space-y-6'}>
                     {s.view === 'bento' && (
                         <BentoDashboard
                             tables={s.tables}
@@ -431,7 +431,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                 </div>
 
                 {/* Right Area (POS Checkout Settle Panel & Aggregator Notification Bento Box) */}
-                <div className="lg:col-span-4 flex flex-col gap-6 sticky top-24 self-start">
+                {!(['kitchen_tickets', 'staff_roster', 'crm_customers', 'table_config', 'gst_settings'].includes(s.view)) && <div className="lg:col-span-4 flex flex-col gap-6 sticky top-24 self-start">
                     <BillingCheckout
                         selectedTable={s.selectedTable}
                         setSelectedTable={s.setSelectedTable}
@@ -682,7 +682,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>}
             </main>
 
             {/* ── Left Collapsible Sliding Drawer (Operations Sidebar) ── */}
@@ -699,7 +699,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
 
             {/* ── Sub-Modals for Drawer and Overlays ── */}
             <AnimatePresence>
-                {s.activeOpModal === 'Drawer Session' && (
+                {s.activeOpModal === 'drawer_session' && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0 }}
@@ -742,7 +742,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                     </div>
                 )}
 
-                {s.activeOpModal === 'Petty Expenses' && (
+                {s.activeOpModal === 'petty_expenses' && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0 }}
