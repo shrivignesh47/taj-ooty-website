@@ -3,22 +3,22 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, ChefHat, Play, CheckCircle2, AlertCircle, ShoppingBag } from 'lucide-react';
 import { orderTotal, fmt } from './utils';
-import { CashierOrder } from '../types';
+import { CashierOrder, MainView } from '../types';
 import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
 import { simulateOnlineOrder, fetchRestaurantSettings } from '@/features/ordering/actions/adminActions';
 
-type ViewName = 'bento' | 'tables' | 'takeaway' | 'history' | 'reports' | 'online_orders';
-
 interface Props {
     onlineOrders: CashierOrder[];
-    setView: (view: ViewName) => void;
+    setView: (view: MainView) => void;
     loadData: () => Promise<void>;
+    searchQuery?: string;
 }
 
 export function BillingOnlineOrders({
     onlineOrders,
     setView,
-    loadData
+    loadData,
+    searchQuery = ''
 }: Props) {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [settings, setSettings] = useState({
@@ -76,8 +76,18 @@ export function BillingOnlineOrders({
         setActionLoading(null);
     };
 
-    const swiggyOrders = onlineOrders.filter(o => o.source === 'swiggy');
-    const zomatoOrders = onlineOrders.filter(o => o.source === 'zomato');
+    const filteredOnlineOrders = onlineOrders.filter(order => {
+        if (!searchQuery || !searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase().trim();
+        const nameMatch = order.customer_name?.toLowerCase().includes(q) ?? false;
+        const phoneMatch = order.customer_phone?.includes(q) ?? false;
+        const sourceMatch = order.source?.toLowerCase().includes(q) ?? false;
+        const itemMatch = order.order_items?.some(i => i.menu_items?.name?.toLowerCase().includes(q)) ?? false;
+        return nameMatch || phoneMatch || sourceMatch || itemMatch;
+    });
+
+    const swiggyOrders = filteredOnlineOrders.filter(o => o.source === 'swiggy');
+    const zomatoOrders = filteredOnlineOrders.filter(o => o.source === 'zomato');
 
     return (
         <div className="space-y-6">

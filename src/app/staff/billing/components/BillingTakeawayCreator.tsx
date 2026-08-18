@@ -5,13 +5,15 @@ import { ShoppingBag, Search, Plus, Minus, X, Check, ChefHat, Play } from 'lucid
 import { fmt } from './utils';
 import { createTakeawayOrder } from '@/features/ordering/actions/adminActions';
 import { supabase } from '@/features/ordering/lib/supabase';
+import { toast } from '@/features/ordering/lib/toast';
+import { MenuItem, TableView } from '../types';
 
 interface Props {
-    menuItems: any[];
+    menuItems: MenuItem[];
     takeawayOrdersCount: number;
     onClose: () => void;
     loadData: () => Promise<void>;
-    handleSelectTable: (dummyTable: any) => void;
+    handleSelectTable: (table: TableView) => void;
 }
 
 export function BillingTakeawayCreator({
@@ -30,7 +32,7 @@ export function BillingTakeawayCreator({
     const [tokenNo, setTokenNo] = useState('');
     
     // Cart state
-    const [cart, setCart] = useState<{ item: any; qty: number }[]>([]);
+    const [cart, setCart] = useState<{ item: MenuItem; qty: number }[]>([]);
     const [saving, setSaving] = useState(false);
 
     // Auto-generate Token sequential number reset daily from 1
@@ -56,7 +58,8 @@ export function BillingTakeawayCreator({
     }, [takeawayOrdersCount]);
 
     // Unique Categories list extraction
-    const categories = ['All', ...Array.from(new Set(menuItems.map(i => i.categories?.name).filter(Boolean)))];
+    const rawCatNames = menuItems.map(i => i.categories?.name).filter((name): name is string => Boolean(name));
+    const categories: string[] = ['All', ...Array.from(new Set(rawCatNames))];
 
     // Filtered menu items
     const filteredItems = menuItems.filter(item => {
@@ -66,11 +69,11 @@ export function BillingTakeawayCreator({
         return matchesSearch && matchesCategory;
     });
 
-    const handleAddToCart = (item: any) => {
+    const handleAddToCart = (item: MenuItem) => {
         const inCart = cart.find(i => i.item.id === item.id);
         const currentQty = inCart ? inCart.qty : 0;
-        if (item.stock_qty !== null && currentQty >= item.stock_qty) {
-            alert(`Sorry, only ${item.stock_qty} portions of ${item.name} are available in the kitchen!`);
+        if (item.stock_qty != null && currentQty >= item.stock_qty) {
+            toast.warning(`Sorry, only ${item.stock_qty} portions of ${item.name} are available in the kitchen!`);
             return;
         }
         setCart(prev => {
@@ -86,8 +89,8 @@ export function BillingTakeawayCreator({
         setCart(prev => {
             const existing = prev.find(i => i.item.id === itemId);
             if (!existing) return prev;
-            if (diff > 0 && existing.item.stock_qty !== null && existing.qty >= existing.item.stock_qty) {
-                alert(`Sorry, only ${existing.item.stock_qty} portions of ${existing.item.name} are available in the kitchen!`);
+            if (diff > 0 && existing.item.stock_qty != null && existing.qty >= existing.item.stock_qty) {
+                toast.warning(`Sorry, only ${existing.item.stock_qty} portions of ${existing.item.name} are available in the kitchen!`);
                 return prev;
             }
             const newQty = existing.qty + diff;
@@ -104,7 +107,7 @@ export function BillingTakeawayCreator({
 
     const handleSubmit = async (targetStatus: 'confirmed' | 'preparing') => {
         if (cart.length === 0) {
-            alert('Your cart is empty. Please add items to order.');
+            toast.warning('Your cart is empty. Please add items to order.');
             return;
         }
         setSaving(true);
@@ -122,7 +125,7 @@ export function BillingTakeawayCreator({
 
         const result = await createTakeawayOrder(payload);
         if (!result.success) {
-            alert(`Failed to save takeaway order: ${result.error}`);
+            toast.error(`Failed to save takeaway order: ${result.error}`);
             setSaving(false);
             return;
         }
@@ -190,7 +193,7 @@ export function BillingTakeawayCreator({
                             />
                         </div>
                         <div className="flex gap-1.5 overflow-x-auto pb-1 max-w-full md:max-w-xs taj-scrollbar">
-                            {categories.map((cat: any) => (
+                            {categories.map((cat: string) => (
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategory(cat)}
@@ -222,7 +225,7 @@ export function BillingTakeawayCreator({
                                         </div>
                                         <p className="text-[10px] text-[#C9974A] font-extrabold flex items-center gap-1.5">
                                             <span>{fmt(item.price)}</span>
-                                            {item.stock_qty !== null && (
+                                            {item.stock_qty != null && (
                                                 <span className="text-[9px] bg-amber-100 text-amber-850 border border-amber-200 px-1.5 py-0.5 rounded font-black">
                                                     {item.stock_qty <= 3 ? `Ending: ${item.stock_qty} Left` : `${item.stock_qty} Qty`}
                                                 </span>

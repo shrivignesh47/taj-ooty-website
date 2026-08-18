@@ -9,11 +9,15 @@ import {
 import { fmt } from './utils';
 import { applyOrderItemDiscount } from '@/features/ordering/actions/adminActions';
 
+import { TableView } from '../types';
+import { CustomerLoyaltyData } from '@/features/ordering/actions/loyaltyActions';
+import { ArrowRightLeft } from 'lucide-react';
+
 const DISCOUNT_REASONS = ['Complimentary', 'Loyalty Discount', 'Manager Comp', 'Other'];
 
 interface Props {
-    selectedTable: any;
-    setSelectedTable: (table: any) => void;
+    selectedTable: TableView | null;
+    setSelectedTable: (table: TableView | null) => void;
     isRegisterOpen: boolean;
     canSettleBills: boolean;
     paymentMethod: 'cash' | 'card' | 'upi' | 'split';
@@ -36,14 +40,18 @@ interface Props {
     setMultiTenderRows?: (rows: { method: 'cash' | 'card' | 'upi'; amount: number }[]) => void;
     pointsToRedeem?: number;
     setPointsToRedeem?: (pts: number) => void;
-    customerLoyalty?: any;
+    customerLoyalty?: CustomerLoyaltyData | null;
     loyaltyToast?: string | null;
-    settings: any;
-    handlePrintBill: (table: any) => void;
-    handleSettlePayment: (table: any) => void;
-    getCheckoutCalculation: (table: any) => any;
+    settings: Record<string, any>;
+    handlePrintBill: (table: TableView) => void;
+    handleSettlePayment: (table: TableView) => void;
+    getCheckoutCalculation: (table: TableView) => any;
     handleApplyCoupon: (code: string) => void;
     loadData?: () => Promise<void>;
+    customerGstin?: string;
+    setCustomerGstin?: (gstin: string) => void;
+    tables?: TableView[];
+    handleTransferTable?: (fromTableId: string, toTableId: string) => Promise<void>;
 }
 
 export function BillingCheckout({
@@ -73,17 +81,23 @@ export function BillingCheckout({
     setPointsToRedeem = () => {},
     customerLoyalty = null,
     loyaltyToast = null,
-    settings,
+    settings = {},
     handlePrintBill,
     handleSettlePayment,
     getCheckoutCalculation,
     handleApplyCoupon,
-    loadData
+    loadData,
+    customerGstin = '',
+    setCustomerGstin = () => {},
+    tables = [],
+    handleTransferTable = async () => {}
 }: Props) {
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [itemDiscPct, setItemDiscPct] = useState<number>(10);
     const [itemDiscReason, setItemDiscReason] = useState<string>('Manager Comp');
     const [savingItemDisc, setSavingItemDisc] = useState<boolean>(false);
+    const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
+    const [targetTableId, setTargetTableId] = useState<string>('');
 
     const handleSaveItemDiscount = async (orderItemId: string) => {
         setSavingItemDisc(true);
@@ -123,18 +137,37 @@ export function BillingCheckout({
                                 </button>
                             </div>
 
-                            {/* Customer information */}
-                            <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/20 rounded-2xl p-3 text-[11px] space-y-1">
-                                <p className="font-semibold flex justify-between">
-                                    <span>Guest Profile:</span>
-                                    <span className="text-[#4E1414] font-bold">{selectedTable.customer_name ?? 'Walk-in'}</span>
-                                </p>
+                            {/* Customer information & GSTIN */}
+                            <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/20 rounded-2xl p-3 text-[11px] space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <p className="font-semibold text-[#4E1414]">
+                                        Guest Profile: <span className="font-bold">{selectedTable.customer_name ?? 'Walk-in'}</span>
+                                    </p>
+                                    {selectedTable.table_no !== 0 && (
+                                        <button
+                                            onClick={() => setShowTransferModal(true)}
+                                            className="px-2 py-0.5 bg-[#4E1414]/10 text-[#4E1414] hover:bg-[#4E1414]/20 rounded font-bold text-[9px] flex items-center gap-1 cursor-pointer"
+                                        >
+                                            <ArrowRightLeft className="w-2.5 h-2.5 text-[#C9974A]" /> Move Table
+                                        </button>
+                                    )}
+                                </div>
                                 {selectedTable.customer_phone && (
-                                    <p className="text-gray-400 flex justify-between">
-                                        <span>Phone Number:</span>
+                                    <p className="text-gray-500 flex justify-between">
+                                        <span>Phone:</span>
                                         <span>{selectedTable.customer_phone}</span>
                                     </p>
                                 )}
+                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#C9974A]/15">
+                                    <span className="text-[10px] text-gray-500 font-bold uppercase">Customer GSTIN:</span>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 33AAAAA0000A1Z5"
+                                        value={customerGstin}
+                                        onChange={e => setCustomerGstin(e.target.value.toUpperCase())}
+                                        className="w-36 bg-white border border-[#C9974A]/30 rounded px-2 py-0.5 text-[10px] font-mono font-bold focus:outline-none"
+                                    />
+                                </div>
                             </div>
 
                             {/* Order Items Breakdown with Item-Level Discount Trigger */}
@@ -553,12 +586,62 @@ export function BillingCheckout({
                         </div>
                     </motion.div>
                 ) : (
-                    <div className="bg-white border-2 border-dashed border-[#C9974A]/30 rounded-3xl p-8 text-center text-[#4E1414]/30 italic font-semibold flex flex-col justify-center items-center h-full min-h-[400px]">
-                        <Utensils className="w-10 h-10 opacity-20 mb-3 text-[#C9974A]" />
-                        Please select an occupied table from the floor map layout to settle.
+                    <div className="flex flex-col items-center justify-center py-20 text-center space-y-2">
+                        <Utensils className="w-10 h-10 text-[#C9974A]/40" />
+                        <p className="font-bold text-sm text-[#4E1414]">No Table Selected</p>
+                        <p className="text-xs text-gray-400 max-w-xs">Select any occupied table from the floor map or express counter to load checkout items.</p>
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Transfer Table Modal */}
+            {showTransferModal && selectedTable && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl border border-[#C9974A]/40 space-y-4">
+                        <div className="flex justify-between items-center border-b pb-2">
+                            <h4 className="font-bold text-sm text-[#4E1414] flex items-center gap-1.5">
+                                <ArrowRightLeft className="w-4 h-4 text-[#C9974A]" /> Transfer Table T-{selectedTable.table_no}
+                            </h4>
+                            <button onClick={() => setShowTransferModal(false)} className="text-gray-400 hover:text-black">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500">Select an empty destination table to transfer all active orders for this table.</p>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Target Empty Table</label>
+                            <select
+                                value={targetTableId}
+                                onChange={e => setTargetTableId(e.target.value)}
+                                className="w-full bg-stone-50 border border-stone-200 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
+                            >
+                                <option value="">-- Select Empty Table --</option>
+                                {tables.filter(t => t.status === 'Empty' && t.id !== selectedTable.id).map(t => (
+                                    <option key={t.id} value={t.id}>Table T-{t.table_no}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                            <button
+                                onClick={() => setShowTransferModal(false)}
+                                className="flex-1 py-2 rounded-xl border border-stone-200 text-xs font-bold text-gray-600 hover:bg-stone-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!targetTableId) { alert('Select a destination table'); return; }
+                                    await handleTransferTable(selectedTable.id, targetTableId);
+                                    setShowTransferModal(false);
+                                }}
+                                disabled={!targetTableId}
+                                className="flex-1 py-2 rounded-xl bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] text-xs font-bold disabled:opacity-40 cursor-pointer"
+                            >
+                                Confirm Move
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

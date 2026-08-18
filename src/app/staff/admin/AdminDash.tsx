@@ -23,6 +23,7 @@ import { AdminSettings } from './components/AdminSettings';
 import { AdminExport } from './components/AdminExport';
 import { AdminGSTConfig } from './components/AdminGSTConfig';
 import { AdminLoyalty } from './components/AdminLoyalty';
+import { NotificationCenter } from '@/components/NotificationCenter';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const NAV_TABS = [
@@ -416,15 +417,6 @@ export function AdminDash() {
                 </nav>
 
                 <div className="p-3 border-t border-[#C9974A]/20 space-y-1.5">
-                    {isSidebarExpanded ? (
-                        <Link href="/staff/dashboard" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl font-bold text-xs uppercase tracking-wider transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
-                            ← Stations Hub
-                        </Link>
-                    ) : (
-                        <Link href="/staff/dashboard" title="Stations Hub" className="w-full flex items-center justify-center p-3 text-[#F6EEDF]/80 hover:text-[#4E1414] hover:bg-[#C9974A] rounded-xl transition-all bg-[#350C0C]/50 border border-[#C9974A]/30">
-                            ←
-                        </Link>
-                    )}
                     <form action={logoutStaff}>
                         <button type="submit" className="w-full flex items-center justify-center gap-2 p-3 text-[#F6EEDF]/60 hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-xl font-bold transition-all" title={!isSidebarExpanded ? 'Sign Out' : undefined}>
                             <LogOut className="w-4 h-4" /> {isSidebarExpanded && 'Sign Out'}
@@ -445,6 +437,7 @@ export function AdminDash() {
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Live data" />
+                        <NotificationCenter currentStaffId={activeUser?.id || 'admin_user'} currentRoleName={activeUser?.roleName || 'Admin'} />
                         <div className="bg-[#F6EEDF] border border-[#C9974A]/30 px-4 py-2 rounded-full text-sm font-bold text-[#4E1414] flex items-center gap-2">
                             <UserIcon /> Admin
                         </div>

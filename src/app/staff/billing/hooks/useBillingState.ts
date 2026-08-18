@@ -5,22 +5,23 @@ import { supabase } from '@/features/ordering/lib/supabase';
 import { orderTotal } from '../components/utils';
 import {
     settleBillWithPayment, settleBillWithSplitPayment, openRegisterSession, closeRegisterSession,
-    getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown
+    getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown, transferTableOrder
 } from '@/features/ordering/actions/billingActions';
 import { getDashboardPreferences } from '@/features/ordering/actions/dashboardPrefActions';
 import { normalizeStaffRole } from '@/features/ordering/config/widgetCatalog';
 import { validateAndApplyCoupon } from '@/features/ordering/actions/couponActions';
 import {
     TableView, CashierOrder, GuestRecord, StaffUser, AttendanceLog,
-    MainView, PayMethod, DayStats, PettyCashEntry
+    MainView, PayMethod, DayStats, PettyCashEntry, ActiveStaffUser
 } from '../types';
 import { printThermalReceipt } from '@/features/ordering/lib/thermalPrint';
 import { buildReceiptCommands } from '@/features/ordering/lib/escpos';
 import {
     getLoyaltyBalance, earnLoyaltyPoints, redeemLoyaltyPoints, CustomerLoyaltyData
 } from '@/features/ordering/actions/loyaltyActions';
+import { toast } from '@/features/ordering/lib/toast';
 
-export function useBillingState(activeUser: any) {
+export function useBillingState(activeUser: ActiveStaffUser) {
     const [view, setView] = useState<MainView>('bento');
     const [tables, setTables] = useState<TableView[]>([]);
     const [activeOrders, setActiveOrders] = useState<CashierOrder[]>([]);
@@ -100,6 +101,7 @@ export function useBillingState(activeUser: any) {
     // Aggregators & drawers
     const [takeawayOrders, setTakeawayOrders] = useState<CashierOrder[]>([]);
     const [onlineOrders, setOnlineOrders] = useState<CashierOrder[]>([]);
+    const [searchQuery, setSearchQuery] = useState<string>('');
     const [restaurantSettings, setRestaurantSettings] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -120,6 +122,7 @@ export function useBillingState(activeUser: any) {
     const [selectedReport, setSelectedReport] = useState<string>('Sales Summary');
     const [attendanceStaffId, setAttendanceStaffId] = useState<string>('');
     const [rolesList, setRolesList] = useState<any[]>([]);
+    const [customerGstin, setCustomerGstin] = useState<string>('');
 
     // Dashboard Personalization widgets
     const [userVisibleWidgets, setUserVisibleWidgets] = useState<string[]>([]);
@@ -157,7 +160,7 @@ export function useBillingState(activeUser: any) {
                 restaurant_tables(table_no, id),
                 order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
             `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
-            supabase.from('menu_items').select('*').order('name'),
+            supabase.from('menu_items').select('*, categories(name)').order('name'),
             supabase.from('staff_users').select('*, roles(name)').order('name'),
             supabase.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
             supabase.from('restaurant_settings').select('*').limit(1).single(),
@@ -183,11 +186,13 @@ export function useBillingState(activeUser: any) {
             setRestaurantSettings(rawSettings);
             setSettings(prev => ({
                 ...prev,
+                // These columns are now in DB via migration 034
                 gstRate: rawSettings.gst_rate ?? 5,
-                serviceChargeRate: rawSettings.service_charge_rate ?? 5,
+                serviceChargeRate: rawSettings.service_charge_rate ?? 0,
                 isGstInclusive: rawSettings.is_gst_inclusive ?? false,
-                chargeServiceTax: rawSettings.charge_service_tax ?? true,
+                chargeServiceTax: rawSettings.charge_service_tax ?? false,
                 headerNote: rawSettings.restaurant_name ?? 'HOTEL TAJ OOTY',
+                footerNote: rawSettings.footer_note ?? 'Thank you! Visit again.',
             }));
         }
 
@@ -206,6 +211,14 @@ export function useBillingState(activeUser: any) {
             if (!attendanceStaffId && rawStaff && rawStaff.length > 0) {
                 setAttendanceStaffId(rawStaff[0].id);
             }
+        }
+
+        if (rawOrders) {
+            setActiveOrders(rawOrders as any[]);
+            const takeaways = (rawOrders as unknown as CashierOrder[]).filter(o => o.source === 'takeaway' || (!o.table_id && o.source !== 'swiggy' && o.source !== 'zomato'));
+            const onlines = (rawOrders as unknown as CashierOrder[]).filter(o => o.source === 'swiggy' || o.source === 'zomato');
+            setTakeawayOrders(takeaways);
+            setOnlineOrders(onlines);
         }
 
         const enriched: TableView[] = (rawTables || []).map(t => {
@@ -239,7 +252,8 @@ export function useBillingState(activeUser: any) {
         aggregateOrders.forEach(o => {
             if (o.customer_phone) {
                 const existing = guestMap.get(o.customer_phone);
-                const sub = (o.order_items || []).reduce((s: number, i: any) => s + i.price_at_order * i.qty, 0) * 1.15;
+                // Use actual item subtotal — no fake multiplier
+                const sub = (o.order_items || []).reduce((s: number, i: any) => s + i.price_at_order * i.qty, 0);
                 if (existing) {
                     existing.totalVisits += 1;
                     existing.totalSpent += sub;
@@ -457,7 +471,7 @@ export function useBillingState(activeUser: any) {
             setDiscountType(res.coupon.type);
             setDiscountValue(res.coupon.value);
         } else {
-            alert(res.error || 'Invalid coupon');
+            toast.error(res.error || 'Invalid coupon');
             setAppliedCoupon('');
             setDiscountValue(0);
         }
@@ -468,12 +482,17 @@ export function useBillingState(activeUser: any) {
         const token = t.orders?.[0]?.token_no;
         const now = new Date();
 
+        // Read restaurant details from DB settings (not hardcoded)
+        const restaurantName = restaurantSettings?.restaurant_name || 'HOTEL TAJ OOTY';
+        const restaurantAddress = restaurantSettings?.address || 'Main Bazaar Road, Ooty';
+        const restaurantPhone = restaurantSettings?.phone || '+91 423 244 4000';
+
         const printerName = restaurantSettings?.printer_name;
         if (printerName) {
             const escCommands = buildReceiptCommands({
-                restaurantName: 'HOTEL TAJ OOTY',
-                address: 'Main Bazaar Road, Ooty',
-                phone: '+91 423 244 4000',
+                restaurantName,
+                address: restaurantAddress,
+                phone: restaurantPhone,
                 billNo: t.orders?.[0]?.id?.slice(-6).toUpperCase() || `B-${t.table_no}`,
                 tableNo: `T-${t.table_no}`,
                 customerName: t.customer_name ?? 'Guest',
@@ -493,7 +512,7 @@ export function useBillingState(activeUser: any) {
                 cgst: calc.cgst,
                 sgst: calc.sgst,
                 grandTotal: calc.grand,
-                footerNote: settings.footerNote || 'Thank you! Visit again.'
+                footerNote: settings.footerNote || restaurantSettings?.footer_note || 'Thank you! Visit again.'
             });
 
             const res = await printThermalReceipt(printerName, escCommands);
@@ -523,6 +542,7 @@ export function useBillingState(activeUser: any) {
 <div class="sep"></div>
 <div class="row"><span>${token ? `Token No: <b>${token}</b>` : `Table: <b>T-${t.table_no}</b>`}</span><span>${now.toLocaleDateString()}</span></div>
 <div class="row"><span>Guest: ${t.customer_name ?? 'Guest'}</span><span>${now.toLocaleTimeString()}</span></div>
+${customerGstin ? `<div class="row"><span>GSTIN: ${customerGstin}</span></div>` : ''}
 <div class="sep"></div>
 <div class="row bold"><span>Item</span><span>Qty × Rate</span><span>Amt</span></div>
 <div class="sep"></div>
@@ -575,7 +595,7 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
             }
 
             if (!result.success) {
-                alert(`Settlement failed: ${result.error}`);
+                toast.error(`Settlement failed: ${result.error}`);
                 return;
             }
 
@@ -600,7 +620,8 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
             loadData();
             loadShiftData();
         } catch (e) {
-            console.error('Failed to settle payment', e);
+            // Surface the error to the user rather than silently swallowing it
+            toast.error(`Payment settlement error: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setSubmittingPayment(false);
         }
@@ -613,7 +634,7 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
         }
         const { error } = await supabase.from('menu_items').update({ is_available: !currentVal }).eq('id', itemId);
         if (error) {
-            alert('Failed to update availability');
+            toast.error('Failed to update availability');
         } else {
             loadData();
         }
@@ -628,15 +649,15 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
 
     const handleStaffAttendance = async (action: 'clock_in' | 'clock_out') => {
         if (!attendanceStaffId) {
-            alert('Select a staff member');
+            toast.warning('Select a staff member');
             return;
         }
         const now = new Date().toISOString();
         if (action === 'clock_in') {
             const { error } = await supabase.from('staff_attendance').insert({ staff_id: attendanceStaffId, clock_in: now });
-            if (error) alert('Failed to clock in: ' + error.message);
+            if (error) toast.error('Failed to clock in: ' + error.message);
             else {
-                alert('Clocked in successfully!');
+                toast.success('Clocked in successfully!');
                 loadData();
             }
         } else {
@@ -650,13 +671,13 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
                 const { error } = await supabase.from('staff_attendance')
                     .update({ clock_out: now })
                     .eq('id', openLogs[0].id);
-                if (error) alert('Failed to clock out: ' + error.message);
+                if (error) toast.error('Failed to clock out: ' + error.message);
                 else {
-                    alert('Clocked out successfully!');
+                    toast.success('Clocked out successfully!');
                     loadData();
                 }
             } else {
-                alert('No active clock-in found for this staff member');
+                toast.warning('No active clock-in found for this staff member');
             }
         }
     };
@@ -694,7 +715,7 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
             setOpeningFloat(Number(res.session.opening_float) || 0);
             loadShiftData();
         } else {
-            alert(res.error || 'Failed to open register session');
+            toast.error(res.error || 'Failed to open register session');
         }
     };
 
@@ -705,16 +726,16 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
             setIsRegisterOpen(false);
             setRegisterSessionId(null);
             setActualClosingCash(closingCash);
-            alert('Register session closed successfully!');
+            toast.success('Register session closed successfully!');
             loadShiftData();
         } else {
-            alert(res.error || 'Failed to close session');
+            toast.error(res.error || 'Failed to close session');
         }
     };
 
     const handleAddExpense = async (desc: string, amt: number) => {
         if (!registerSessionId) {
-            alert('Cash register session must be open to log petty expenses');
+            toast.warning('Cash register session must be open to log petty expenses');
             return;
         }
         const res = await addPettyExpense(registerSessionId, desc, amt);
@@ -723,20 +744,70 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
             setNewExpenseAmount(0);
             loadShiftData();
         } else {
-            alert(res.error || 'Failed to record expense');
+            toast.error(res.error || 'Failed to record expense');
         }
     };
 
-    const toggleAggregator = async (aggregator: 'swiggy' | 'zomato') => {
-        const newSettings = { ...settings };
-        if (aggregator === 'swiggy') {
-            newSettings.headerNote = settings.headerNote;
+    const handleTransferTable = async (fromTableId: string, toTableId: string) => {
+        const res = await transferTableOrder(fromTableId, toTableId);
+        if (!res.success) {
+            toast.error(res.error || 'Failed to transfer table');
+        } else {
+            setSelectedTable(null);
+            await loadData();
         }
-        setSettings(newSettings);
-        if (restaurantSettings) {
-            const field = aggregator === 'swiggy' ? 'is_swiggy_active' : 'is_zomato_active';
-            const val = !restaurantSettings[field];
-            await supabase.from('restaurant_settings').update({ [field]: val }).eq('id', restaurantSettings.id);
+    };
+
+    const handlePrintKOT = (order: CashierOrder) => {
+        const w = window.open('', '_blank', 'width=380,height=500');
+        if (!w) return;
+        const now = new Date(order.created_at);
+        w.document.write(`<!DOCTYPE html>
+<html><head><title>KOT #${order.token_no || order.id.slice(0, 6)}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Courier New',monospace;width:280px;padding:10px;font-size:11px;color:#000}
+  h1{font-size:16px;text-align:center;font-weight:900}
+  .center{text-align:center}
+  .sep{border-top:2px solid #000;margin:6px 0}
+  .dashed{border-top:1px dashed #000;margin:4px 0}
+  .row{display:flex;justify-content:space-between;margin:3px 0}
+  .bold{font-weight:700}
+  .item-row{font-size:13px;font-weight:800;margin:4px 0}
+  .note{font-size:10px;font-style:italic;color:#333;margin-left:8px}
+</style></head>
+<body>
+<h1>*** KITCHEN ORDER TICKET ***</h1>
+<p class="center bold">Hotel Taj Ooty</p>
+<div class="sep"></div>
+<div class="row bold"><span>${order.restaurant_tables ? `TABLE: T-${order.restaurant_tables.table_no}` : `PICKUP #${order.token_no || order.id.slice(0,4)}`}</span><span>${now.toLocaleTimeString()}</span></div>
+<div class="row"><span>Guest: ${order.customer_name || 'Walk-in'}</span><span>${now.toLocaleDateString()}</span></div>
+<div class="sep"></div>
+<div class="row bold"><span>QTY & ITEM</span><span>STATUS</span></div>
+<div class="dashed"></div>
+${(order.order_items || []).map((i: any) => `
+<div class="item-row flex justify-between">
+  <span>${i.qty} × ${i.menu_items?.name || 'Item'}</span>
+</div>
+${i.notes ? `<div class="note">Note: ${i.notes}</div>` : ''}
+`).join('')}
+<div class="sep"></div>
+<p class="center bold">Printed by Cashier Desk</p>
+<script>window.onload=()=>{window.print();window.close();}</script>
+</body></html>`);
+        w.document.close();
+    };
+
+    const toggleAggregator = async (aggregator: 'swiggy' | 'zomato') => {
+        if (!restaurantSettings) return;
+        // DB columns are swiggy_enabled / zomato_enabled (migration 014)
+        const field = aggregator === 'swiggy' ? 'swiggy_enabled' : 'zomato_enabled';
+        const val = !restaurantSettings[field];
+        const { error } = await supabase
+            .from('restaurant_settings')
+            .update({ [field]: val })
+            .eq('id', restaurantSettings.id);
+        if (!error) {
             setRestaurantSettings({ ...restaurantSettings, [field]: val });
         }
     };
@@ -757,10 +828,11 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
         settings, setSettings, activeOpModal, setActiveOpModal, deniedPermission, setDeniedPermission,
         selectedReport, setSelectedReport, attendanceStaffId, setAttendanceStaffId, rolesList,
         userVisibleWidgets, setUserVisibleWidgets, userWidgetOrder, setUserWidgetOrder, isCustomizeOpen, setIsCustomizeOpen,
-        isPrinterModalOpen, setIsPrinterModalOpen,
+        isPrinterModalOpen, setIsPrinterModalOpen, customerGstin, setCustomerGstin, searchQuery, setSearchQuery,
         hasPerm, canApplyDiscount, canSettleBills, loadData, loadShiftData, handleSelectTable,
         getCheckoutCalculation, handleApplyCoupon, handlePrintBill, handleSettlePayment,
         handleToggleItemStock, handleStaffAttendance, handleUpdateMenuStock, triggerPermissionDenied,
-        handleSidebarAction, handleAddExpense, handleCloseSession, handleOpenSession
+        handleSidebarAction, handleAddExpense, handleCloseSession, handleOpenSession,
+        handleTransferTable, handlePrintKOT
     };
 }

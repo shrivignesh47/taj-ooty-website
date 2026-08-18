@@ -3,15 +3,16 @@
 import { useState } from 'react';
 import { ClipboardList, IndianRupee, Plus, ChefHat, Check } from 'lucide-react';
 import { orderTotal, fmt } from './utils';
-import { CashierOrder } from '../types';
+import { CashierOrder, MenuItem, MainView, TableView } from '../types';
 import { BillingTakeawayCreator } from './BillingTakeawayCreator';
 
 interface Props {
     takeawayOrders: CashierOrder[];
-    setView: (view: any) => void;
-    handleSelectTable: (dummyTable: any) => void;
-    menuItemsList: any[];
+    setView: (view: MainView) => void;
+    handleSelectTable: (table: TableView) => void;
+    menuItemsList: MenuItem[];
     loadData: () => Promise<void>;
+    searchQuery?: string;
 }
 
 export function BillingTakeaway({
@@ -19,9 +20,20 @@ export function BillingTakeaway({
     setView,
     handleSelectTable,
     menuItemsList,
-    loadData
+    loadData,
+    searchQuery = ''
 }: Props) {
     const [showCreator, setShowCreator] = useState(false);
+
+    const filteredOrders = takeawayOrders.filter(order => {
+        if (!searchQuery || !searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase().trim();
+        const nameMatch = order.customer_name?.toLowerCase().includes(q) ?? false;
+        const phoneMatch = order.customer_phone?.includes(q) ?? false;
+        const tokenMatch = order.token_no?.toLowerCase().includes(q) ?? false;
+        const itemMatch = order.order_items?.some(i => i.menu_items?.name?.toLowerCase().includes(q)) ?? false;
+        return nameMatch || phoneMatch || tokenMatch || itemMatch;
+    });
 
     return (
         <div className="space-y-6">
@@ -55,7 +67,7 @@ export function BillingTakeaway({
                     <p className="text-xs text-[#4E1414]/60">Settle counter pickups that aren't tied to dining tables.</p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {takeawayOrders.map(order => {
+                        {filteredOrders.map(order => {
                             const total = orderTotal(order);
                             return (
                                 <div key={order.id} className="bg-[#F6EEDF]/30 border border-[#C9974A]/25 rounded-xl p-4 flex flex-col justify-between space-y-3">
@@ -118,7 +130,7 @@ export function BillingTakeaway({
                                 </div>
                             );
                         })}
-                        {takeawayOrders.length === 0 && (
+                        {filteredOrders.length === 0 && (
                             <div className="col-span-full border border-dashed border-[#C9974A]/40 rounded-xl p-8 text-center text-[#4E1414]/40 font-semibold italic">
                                 No active counter takeaway orders. Click "Create Takeaway Order" to build a new one.
                             </div>

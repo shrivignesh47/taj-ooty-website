@@ -2,7 +2,6 @@
 
 import { useBillingState } from './hooks/useBillingState';
 import { BillingHeader } from './components/BillingHeader';
-import { BillingSidebar } from './components/BillingSidebar';
 import { BillingCheckout } from './components/BillingCheckout';
 import { BentoDashboard } from './components/BentoDashboard';
 import { BillingTakeaway } from './components/BillingTakeaway';
@@ -19,6 +18,7 @@ import { KitchenDash } from '@/app/staff/kitchen/KitchenDash';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import { simulateOnlineOrder } from '@/features/ordering/actions/adminActions';
 import { advanceOrderStatus } from '@/features/ordering/actions/updateOrderStatus';
+import { supabase } from '@/features/ordering/lib/supabase';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     X, ShieldAlert, Users, User, LayoutGrid, FileSpreadsheet, Loader2,
@@ -26,8 +26,11 @@ import {
     Play, CheckCircle2, AlertCircle, ShoppingBag, ChefHat, Globe
 } from 'lucide-react';
 import { fmt } from './components/utils';
+import { ActiveStaffUser } from './types';
+import { Toaster } from '@/components/Toaster';
+import { toast } from '@/features/ordering/lib/toast';
 
-export function BillingDash({ activeUser }: { activeUser: any }) {
+export function BillingDash({ activeUser }: { activeUser: ActiveStaffUser }) {
     const s = useBillingState(activeUser);
 
     if (s.loading) {
@@ -43,6 +46,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
 
     return (
         <div className="min-h-screen bg-[#F6EEDF] text-[#4E1414] flex flex-col font-sans relative overflow-hidden">
+            <Toaster />
 
             {/* ── POS Status Bar Alerts ── */}
             <AnimatePresence>
@@ -63,11 +67,17 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
             <BillingHeader
                 dayStats={s.dayStats}
                 refreshing={s.refreshing}
-                setIsSidebarOpen={s.setIsSidebarOpen}
                 setRefreshing={s.setRefreshing}
                 loadData={s.loadData}
                 logoutStaff={logoutStaff}
-                onGoHome={() => { s.setView('bento'); s.setSelectedTable(null); }}
+                activeView={s.view}
+                hasPerm={s.hasPerm}
+                handleSidebarAction={s.handleSidebarAction}
+                triggerPermissionDenied={s.triggerPermissionDenied}
+                activeUser={activeUser}
+                searchQuery={s.searchQuery}
+                setSearchQuery={s.setSearchQuery}
+                onNewOrder={() => s.setView('takeaway')}
                 onOpenCustomize={() => s.setIsCustomizeOpen(true)}
                 onOpenPrinterSetup={() => s.setIsPrinterModalOpen(true)}
             />
@@ -103,6 +113,8 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             loadData={s.loadData}
                             visibleWidgets={s.userVisibleWidgets}
                             widgetOrder={s.userWidgetOrder}
+                            handlePrintKOT={s.handlePrintKOT}
+                            searchQuery={s.searchQuery}
                         />
                     )}
                     {s.view === 'tables' && (
@@ -119,6 +131,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                     }
                                 }}
                                 readOnly={!s.hasPerm('manage_tables')}
+                                searchQuery={s.searchQuery}
                             />
                         </div>
                     )}
@@ -130,6 +143,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             handleSelectTable={s.handleSelectTable}
                             menuItemsList={s.menuItemsList}
                             loadData={s.loadData}
+                            searchQuery={s.searchQuery}
                         />
                     )}
 
@@ -138,6 +152,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                             onlineOrders={s.onlineOrders}
                             setView={s.setView}
                             loadData={s.loadData}
+                            searchQuery={s.searchQuery}
                         />
                     )}
 
@@ -145,6 +160,10 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                         <BillingHistory
                             history={s.history}
                             setView={s.setView}
+                            gstRate={s.settings.gstRate / 100}
+                            settings={s.settings}
+                            restaurantSettings={s.restaurantSettings}
+                            searchQuery={s.searchQuery}
                         />
                     )}
 
@@ -415,8 +434,22 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                             type="button"
                                             onClick={async () => {
                                                 if (s.restaurantSettings?.id) {
-                                                    await s.setSettings({ ...s.settings });
-                                                    alert('GST Tax Settings saved successfully!');
+                                                    const { error } = await supabase
+                                                        .from('restaurant_settings')
+                                                        .update({
+                                                            gst_rate: s.settings.gstRate,
+                                                            is_gst_inclusive: s.settings.isGstInclusive,
+                                                            service_charge_rate: s.settings.serviceChargeRate,
+                                                            charge_service_tax: s.settings.chargeServiceTax,
+                                                            footer_note: s.settings.footerNote,
+                                                        })
+                                                        .eq('id', s.restaurantSettings.id);
+                                                    if (error) {
+                                                        toast.error('Failed to save: ' + error.message);
+                                                    } else {
+                                                        toast.success('GST Tax Settings saved successfully!');
+                                                        s.loadData(); // reload so hook re-reads from DB
+                                                    }
                                                 }
                                             }}
                                             className="px-6 py-2.5 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold text-xs rounded-xl shadow transition-all cursor-pointer"
@@ -465,6 +498,10 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                         getCheckoutCalculation={s.getCheckoutCalculation}
                         handleApplyCoupon={s.handleApplyCoupon}
                         loadData={s.loadData}
+                        customerGstin={s.customerGstin}
+                        setCustomerGstin={s.setCustomerGstin}
+                        tables={s.tables}
+                        handleTransferTable={s.handleTransferTable}
                     />
 
                     {/* Swiggy & Zomato Realtime Notification Card */}
@@ -531,7 +568,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 onClick={async () => {
                                                     if (confirm('Cancel this online order?')) {
                                                         const res = await advanceOrderStatus(order.id, 'cancelled');
-                                                        if ('error' in res) alert(res.error);
+                                                        if ('error' in res) toast.error(res.error || 'Failed to cancel order');
                                                         else s.loadData();
                                                     }
                                                 }}
@@ -555,7 +592,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 <button
                                                     onClick={async () => {
                                                         const res = await advanceOrderStatus(order.id, 'confirmed');
-                                                        if ('error' in res) alert(res.error);
+                                                        if ('error' in res) toast.error(res.error || 'Failed to confirm order');
                                                         else s.loadData();
                                                     }}
                                                     style={{ backgroundColor: brandColor }}
@@ -567,7 +604,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                                 <button
                                                     onClick={async () => {
                                                         const res = await advanceOrderStatus(order.id, 'preparing');
-                                                        if ('error' in res) alert(res.error);
+                                                        if ('error' in res) toast.error(res.error || 'Failed to update status');
                                                         else s.loadData();
                                                     }}
                                                     className="flex-1 bg-[#4E1414] text-[#F6EEDF] font-bold text-[9px] py-1 rounded flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
@@ -590,7 +627,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                             disabled={!s.restaurantSettings?.swiggy_enabled}
                                             onClick={async () => {
                                                 const res = await simulateOnlineOrder('swiggy');
-                                                if (!res.success) alert(res.error);
+                                                if (!res.success) toast.error(res.error || 'Failed to simulate Swiggy order');
                                                 else s.loadData();
                                             }}
                                             className="px-2 py-0.5 bg-stone-50 border border-stone-200 text-gray-600 hover:text-orange-600 rounded text-[8px] font-bold uppercase transition-all disabled:opacity-40 cursor-pointer"
@@ -601,7 +638,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                             disabled={!s.restaurantSettings?.zomato_enabled}
                                             onClick={async () => {
                                                 const res = await simulateOnlineOrder('zomato');
-                                                if (!res.success) alert(res.error);
+                                                if (!res.success) toast.error(res.error || 'Failed to simulate Zomato order');
                                                 else s.loadData();
                                             }}
                                             className="px-2 py-0.5 bg-stone-50 border border-stone-200 text-gray-600 hover:text-rose-600 rounded text-[8px] font-bold uppercase transition-all disabled:opacity-40 cursor-pointer"
@@ -685,17 +722,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                 </div>}
             </main>
 
-            {/* ── Left Collapsible Sliding Drawer (Operations Sidebar) ── */}
-            <AnimatePresence>
-                {s.isSidebarOpen && (
-                    <BillingSidebar
-                        isSidebarOpen={s.isSidebarOpen}
-                        setIsSidebarOpen={s.setIsSidebarOpen}
-                        hasPerm={s.hasPerm}
-                        handleSidebarAction={s.handleSidebarAction}
-                    />
-                )}
-            </AnimatePresence>
+
 
             {/* ── Sub-Modals for Drawer and Overlays ── */}
             <AnimatePresence>
@@ -754,7 +781,7 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                 <h3 className="text-[#F6EEDF] font-bold text-sm">Add Petty Cash Expense</h3>
                                 <button onClick={() => s.setActiveOpModal(null)} className="text-[#F6EEDF]/80 hover:text-white"><X className="w-4 h-4" /></button>
                             </div>
-                            <form onSubmit={(e) => { e.preventDefault(); s.handleAddExpense(s.newExpensePurpose, s.newExpenseAmount); }} className="p-6 space-y-4 text-xs">
+                            <div className="p-6 space-y-4 text-xs">
                                 <div>
                                     <label className="block text-gray-400 font-bold mb-1 uppercase tracking-wide">Expense Purpose / Vendor</label>
                                     <input
@@ -778,88 +805,24 @@ export function BillingDash({ activeUser }: { activeUser: any }) {
                                     />
                                 </div>
                                 <button
-                                    type="submit"
+                                    type="button"
+                                    onClick={() => {
+                                        if (!s.newExpensePurpose.trim()) { toast.warning('Enter expense description'); return; }
+                                        if (!s.newExpenseAmount || s.newExpenseAmount <= 0) { toast.warning('Enter a valid amount'); return; }
+                                        s.handleAddExpense(s.newExpensePurpose, s.newExpenseAmount);
+                                        s.setActiveOpModal(null);
+                                    }}
                                     className="w-full bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-2.5 rounded-xl transition-colors mt-2"
                                 >
                                     Log Petty Expense
                                 </button>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-
-                {s.activeOpModal === 'GST Settings' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-[#C9974A]/30"
-                        >
-                            <div className="bg-[#4E1414] px-6 py-4 flex justify-between items-center">
-                                <h3 className="text-[#F6EEDF] font-bold text-sm flex items-center gap-1.5">
-                                    <Settings className="w-4 h-4 text-[#C9974A]" /> GST Tax Calculations Configuration
-                                </h3>
-                                <button onClick={() => s.setActiveOpModal(null)} className="text-[#F6EEDF]/80 hover:text-white"><X className="w-4 h-4" /></button>
-                            </div>
-                            <div className="p-6 space-y-4 text-xs">
-                                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                    <div>
-                                        <p className="font-bold text-[#4E1414]">Inclusive GST Calculation</p>
-                                        <p className="text-[10px] text-gray-400">Calculate CGST/SGST within bill total</p>
-                                    </div>
-                                    <input
-                                        type="checkbox"
-                                        checked={s.settings.isGstInclusive}
-                                        onChange={e => s.setSettings(prev => ({ ...prev, isGstInclusive: e.target.checked }))}
-                                        className="rounded border-[#C9974A]/40 text-[#4E1414] focus:ring-0"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-gray-400 font-bold mb-1 uppercase tracking-wide">Indian GST Rate (%)</label>
-                                    <input
-                                        type="number"
-                                        value={s.settings.gstRate}
-                                        onChange={e => s.setSettings(prev => ({ ...prev, gstRate: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                                        className="w-full bg-[#F6EEDF]/30 border border-[#C9974A]/30 rounded-xl py-2.5 px-3 focus:outline-none"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 text-center">
-                                    <div className="bg-gray-50 p-2.5 rounded-lg border">
-                                        <span className="text-[9px] text-gray-400 uppercase font-bold">CGST (Auto 50%)</span>
-                                        <p className="text-sm font-black text-[#4E1414] mt-0.5">{(s.settings.gstRate / 2)}%</p>
-                                    </div>
-                                    <div className="bg-gray-50 p-2.5 rounded-lg border">
-                                        <span className="text-[9px] text-gray-400 uppercase font-bold">SGST (Auto 50%)</span>
-                                        <p className="text-sm font-black text-[#4E1414] mt-0.5">{(s.settings.gstRate / 2)}%</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-between items-center py-2 border-t pt-3 border-gray-100">
-                                    <div>
-                                        <p className="font-bold text-[#4E1414]">Service Fee (10%)</p>
-                                        <p className="text-[10px] text-gray-400">Add service charges to invoices</p>
-                                    </div>
-                                    <input
-                                        type="checkbox"
-                                        checked={s.settings.chargeServiceTax}
-                                        onChange={e => s.setSettings(prev => ({ ...prev, chargeServiceTax: e.target.checked }))}
-                                        className="rounded border-[#C9974A]/40 text-[#4E1414] focus:ring-0"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={() => s.setActiveOpModal(null)}
-                                    className="w-full bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-2.5 rounded-xl transition-colors mt-2"
-                                >
-                                    Apply Configuration
-                                </button>
                             </div>
                         </motion.div>
                     </div>
                 )}
+
+                {/* GST Settings now rendered as a view (s.view === 'gst_settings') not as a modal.
+                    The old activeOpModal === 'GST Settings' path is removed to avoid duplicate disconnected UIs. */}
 
                 {s.activeOpModal === 'Staff Roster' && (
                     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">

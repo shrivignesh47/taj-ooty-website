@@ -285,3 +285,29 @@ export async function getTodayPaymentBreakdown() {
     }
     return { cash, card, upi };
 }
+
+// ─── Table transfer server action ───────────────────────────────────────────
+
+export async function transferTableOrder(fromTableId: string, toTableId: string) {
+    const identity = await requireCashierIdentity();
+    if ('error' in identity) return { success: false, error: identity.error };
+
+    const { error } = await supabaseAdmin
+        .from('orders')
+        .update({ table_id: toTableId })
+        .eq('table_id', fromTableId)
+        .in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']);
+
+    if (error) return { success: false, error: `Transfer failed: ${error.message}` };
+
+    await supabaseAdmin.from('staff_activity_log').insert({
+        staff_id: identity.staff.id,
+        action: 'TABLE_TRANSFERRED',
+        details: { from_table_id: fromTableId, to_table_id: toTableId }
+    });
+
+    revalidatePath('/staff/billing');
+    revalidatePath('/staff/orders');
+    return { success: true };
+}
+

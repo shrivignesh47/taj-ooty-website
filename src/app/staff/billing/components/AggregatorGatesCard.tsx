@@ -3,6 +3,7 @@
 import { Globe, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { fmt } from './utils';
 import { CashierOrder } from '../types';
+import { toast } from '@/features/ordering/lib/toast';
 
 interface RestaurantSettings {
     swiggy_enabled?: boolean;
@@ -138,7 +139,7 @@ export function AggregatorGatesCard({
                                         disabled={!swiggyActive}
                                         onClick={async () => {
                                             const res = await simulateOnlineOrder('swiggy');
-                                            if (!res.success) alert(res.error);
+                                            if (!res.success) toast.error(res.error || 'Failed to simulate Swiggy order');
                                             else loadData();
                                         }}
                                         className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 hover:bg-[#FC8019]/10 hover:border-[#FC8019]/30 hover:text-[#FC8019] rounded-lg text-[8px] font-black uppercase transition-all disabled:opacity-40 cursor-pointer"
@@ -149,7 +150,7 @@ export function AggregatorGatesCard({
                                         disabled={!zomatoActive}
                                         onClick={async () => {
                                             const res = await simulateOnlineOrder('zomato');
-                                            if (!res.success) alert(res.error);
+                                            if (!res.success) toast.error(res.error || 'Failed to simulate Zomato order');
                                             else loadData();
                                         }}
                                         className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 hover:bg-[#E23744]/10 hover:border-[#E23744]/30 hover:text-[#E23744] rounded-lg text-[8px] font-black uppercase transition-all disabled:opacity-40 cursor-pointer"

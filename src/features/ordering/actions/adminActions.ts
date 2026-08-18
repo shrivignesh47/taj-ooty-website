@@ -45,6 +45,58 @@ export async function createTable(waiterName?: string) {
     return { success: true, table_no: nextNo };
 }
 
+export async function createCustomTable(tableNo: number, waiterId?: string | null) {
+    if (!tableNo || tableNo <= 0) {
+        return { success: false, error: 'Please enter a valid positive table number.' };
+    }
+
+    const { data: existing } = await admin
+        .from('restaurant_tables')
+        .select('id')
+        .eq('table_no', tableNo)
+        .maybeSingle();
+
+    if (existing) {
+        return { success: false, error: `Table T-${tableNo} already exists!` };
+    }
+
+    const { error } = await admin.from('restaurant_tables').insert({
+        table_no: tableNo,
+        assigned_waiter_id: waiterId || null,
+        qr_code_url: null,
+    });
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/staff/admin');
+    return { success: true, table_no: tableNo };
+}
+
+export async function renameTable(tableId: string, newTableNo: number) {
+    if (!newTableNo || newTableNo <= 0) {
+        return { success: false, error: 'Please enter a valid positive table number.' };
+    }
+
+    const { data: existing } = await admin
+        .from('restaurant_tables')
+        .select('id')
+        .eq('table_no', newTableNo)
+        .neq('id', tableId)
+        .maybeSingle();
+
+    if (existing) {
+        return { success: false, error: `Table T-${newTableNo} is already in use!` };
+    }
+
+    const { error } = await admin
+        .from('restaurant_tables')
+        .update({ table_no: newTableNo })
+        .eq('id', tableId);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/staff/admin');
+    return { success: true };
+}
+
 export async function deleteTable(tableId: string) {
     const { error } = await admin.from('restaurant_tables').delete().eq('id', tableId);
     if (error) return { success: false, error: error.message };
@@ -628,7 +680,13 @@ export async function createTakeawayOrder(payload: {
         }));
 
         const { error: itemsErr } = await admin.from('order_items').insert(orderItemsPayload);
-        if (itemsErr) throw itemsErr;
+        if (itemsErr) {
+            if (itemsErr.message?.includes('STOCK_EXHAUSTED:')) {
+                const userMsg = itemsErr.message.split('STOCK_EXHAUSTED:')[1]?.split('\n')[0]?.trim() || 'One or more items just sold out.';
+                return { success: false, error: userMsg };
+            }
+            throw itemsErr;
+        }
 
         // Log status history
         await admin.from('order_status_history').insert({

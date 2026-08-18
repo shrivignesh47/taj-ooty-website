@@ -6,6 +6,7 @@ import {
     TrendingUp
 } from 'lucide-react';
 import { fmt } from './utils';
+import { CashierOrder, MenuItem, MainView } from '../types';
 
 interface Props {
     dayStats: {
@@ -17,11 +18,11 @@ interface Props {
         cardSales: number;
         upiSales: number;
     };
-    setView: (view: 'bento' | 'tables' | 'takeaway' | 'history' | 'reports') => void;
+    setView: (view: MainView) => void;
     selectedReport: string;
     setSelectedReport: (report: string) => void;
-    history: any[];
-    menuItemsList: any[];
+    history: CashierOrder[];
+    menuItemsList: MenuItem[];
 }
 
 export function BillingReports({
@@ -50,9 +51,9 @@ export function BillingReports({
     let totalCategorySalesVal = 0;
 
     history.forEach(order => {
-        order.order_items?.forEach((i: any) => {
+        order.order_items?.forEach((i: CashierOrder['order_items'][number]) => {
             const itemId = i.menu_items?.id;
-            const categoryName = menuCategoryMap[itemId] || 'Uncategorized';
+            const categoryName = (itemId && menuCategoryMap[itemId]) ? menuCategoryMap[itemId] : 'Uncategorized';
             const itemSaleValue = (i.qty * i.price_at_order);
 
             if (!categorySales[categoryName]) {
@@ -74,7 +75,7 @@ export function BillingReports({
     // Calculate real top selling items dynamically
     const itemTotals: Record<string, { name: string; qty: number; revenue: number }> = {};
     history.forEach(order => {
-        order.order_items?.forEach((i: any) => {
+        order.order_items?.forEach((i: CashierOrder['order_items'][number]) => {
             const name = i.menu_items?.name;
             if (name) {
                 if (!itemTotals[name]) {

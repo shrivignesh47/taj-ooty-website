@@ -70,11 +70,11 @@ export function BillingWorkspaceNav({
                 <div className="hidden items-center gap-5 border-l border-slate-200 pl-5 xl:flex">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Today&apos;s sales</p>
-                        <p className="text-sm font-bold text-slate-900">{fmt(stats.revenue)}</p>
+                        <p className="text-sm font-bold text-slate-900">{fmt(stats?.revenue ?? 0)}</p>
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Settlements</p>
-                        <p className="text-sm font-bold text-slate-900">{stats.bills}</p>
+                        <p className="text-sm font-bold text-slate-900">{stats?.bills ?? 0}</p>
                     </div>
                     <button onClick={onOpenShift} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
                         <CircleDollarSign className="h-3.5 w-3.5" />

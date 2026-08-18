@@ -13,6 +13,8 @@ import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier
 import { updateStaffSelf, resetStaffPassword } from '@/features/ordering/actions/staffActions';
 import { logoutStaff, verifyStaff } from '@/features/ordering/actions/auth';
 import { MenuCatalog, getLiveCatalog } from '@/features/ordering/api/getCatalog';
+import { toast } from '@/features/ordering/lib/toast';
+import { Toaster } from '@/components/Toaster';
 
 type LiveOrder = {
     id: string;
@@ -385,7 +387,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     const submitConfirm = async () => {
         if (!selectedOrder) return;
         if (drawerItems.length === 0) {
-            alert('Order cannot be empty. Please add items or reject the order.');
+            toast.warning('Order cannot be empty. Please add items or reject the order.');
             return;
         }
 
@@ -401,7 +403,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             setShowConfirmDrawer(false);
             fetchData();
         } else {
-            alert(res.error || 'Failed to confirm order');
+            toast.error(res.error || 'Failed to confirm order');
         }
         setSubmitting(false);
     };
@@ -423,7 +425,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             setShowRejectModal(false);
             fetchData();
         } else {
-            alert(res.error || 'Failed to reject order');
+            toast.error(res.error || 'Failed to reject order');
         }
         setSubmitting(false);
     };
@@ -435,7 +437,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
         if (res.success) {
             fetchData();
         } else {
-            alert(res.error || 'Failed to mark as served');
+            toast.error(res.error || 'Failed to mark as served');
         }
         setSubmitting(false);
     };
@@ -468,7 +470,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                 setEditExistingItems(editExistingItems.filter((_, idx) => idx !== index));
                 fetchData();
             } else {
-                alert(res.error || 'Failed to delete item');
+                toast.error(res.error || 'Failed to delete item');
             }
             setSubmitting(false);
         } else {
@@ -478,7 +480,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                 setEditExistingItems(editExistingItems.map((it, idx) => idx === index ? { ...it, qty: newQty } : it));
                 fetchData();
             } else {
-                alert(res.error || 'Failed to update item quantity');
+                toast.error(res.error || 'Failed to update item quantity');
             }
             setSubmitting(false);
         }
@@ -493,7 +495,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             setEditExistingItems(editExistingItems.filter((_, idx) => idx !== index));
             fetchData();
         } else {
-            alert(res.error || 'Failed to delete item');
+            toast.error(res.error || 'Failed to delete item');
         }
         setSubmitting(false);
     };
@@ -555,7 +557,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             setNewItemsToAdd([]);
             fetchData();
         } else {
-            alert(res.error || 'Failed to add items to order');
+            toast.error(res.error || 'Failed to add items to order');
         }
         setSubmitting(false);
     };
@@ -568,7 +570,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             setSelectedTable(null);
             fetchData();
         } else {
-            alert(res.error || 'Failed to send table billing.');
+            toast.error(res.error || 'Failed to send table billing.');
         }
         setSubmitting(false);
     };
@@ -1753,15 +1755,15 @@ function ProfilePanel({
         setSubmitting(false);
         if (res.success) {
             setShowEditName(false);
-            alert('Name Updated! Reload the page to apply.');
+            toast.success('Name updated! Reload the page to apply.');
         } else {
-            alert(res.error || 'Failed to update name');
+            toast.error(res.error || 'Failed to update name');
         }
     };
 
     const handleSavePhone = async () => {
         if (!editPhone || editPhone.length < 10) {
-            alert('Please enter a valid 10-digit phone number.');
+            toast.warning('Please enter a valid 10-digit phone number.');
             return;
         }
         setSubmitting(true);
@@ -1769,19 +1771,19 @@ function ProfilePanel({
         setSubmitting(false);
         if (res.success) {
             setShowEditPhone(false);
-            alert('Phone Number Updated!');
+            toast.success('Phone number updated!');
         } else {
-            alert(res.error || 'Failed to update phone number');
+            toast.error(res.error || 'Failed to update phone number');
         }
     };
 
     const handleSavePassword = async () => {
         if (!newPwd || newPwd.length < 4) {
-            alert('Password must be at least 4 characters long.');
+            toast.warning('Password must be at least 4 characters long.');
             return;
         }
         if (newPwd !== confirmPwd) {
-            alert('Passwords do not match.');
+            toast.warning('Passwords do not match.');
             return;
         }
 
@@ -1793,9 +1795,9 @@ function ProfilePanel({
             setShowEditPwd(false);
             setNewPwd('');
             setConfirmPwd('');
-            alert('Password changed successfully.');
+            toast.success('Password changed successfully.');
         } else {
-            alert(error.message);
+            toast.error(error.message);
         }
     };
 

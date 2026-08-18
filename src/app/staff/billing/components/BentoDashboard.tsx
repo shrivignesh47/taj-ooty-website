@@ -1,28 +1,35 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { AdminTablesLive } from "@/app/staff/admin/components/AdminTablesLive";
 import {
     LayoutGrid, ChefHat, CalendarRange, Activity, Flame,
     ShoppingBag, Plus, ArrowRight, CheckCircle2, Clock,
-    Search, Package, AlertCircle
+    Search, Package, AlertCircle, Printer
 } from "lucide-react";
 import { fmt, orderTotal } from "./utils";
 import { advanceOrderStatus } from "@/features/ordering/actions/updateOrderStatus";
 import { BillingTakeawayCreator } from "./BillingTakeawayCreator";
+import { toast } from "@/features/ordering/lib/toast";
+import {
+    TableView, MenuItem, CashierOrder, DayStats,
+    StaffUser, AttendanceLog, GuestRecord, MainView
+} from "../types";
 
 interface Props {
-    tables: any[]; handleSelectTable: (table: any) => void; hasPerm: (perm: string) => boolean;
-    menuItemsList: any[]; handleToggleItemStock: (itemId: string, currentVal: boolean) => void;
-    activeOrders: any[]; takeawayOrders: any[];
+    tables: TableView[]; handleSelectTable: (table: TableView) => void; hasPerm: (perm: string) => boolean;
+    menuItemsList: MenuItem[]; handleToggleItemStock: (itemId: string, currentVal: boolean) => void;
+    activeOrders: CashierOrder[]; takeawayOrders: CashierOrder[];
     attendanceStaffId: string; setAttendanceStaffId: (id: string) => void;
-    staffList: any[]; handleStaffAttendance: (action: "clock_in" | "clock_out") => void;
-    attendanceLogs: any[]; guests: any[];
-    openingFloat: number; expectedCash: number; dayStats: any; isRegisterOpen: boolean;
+    staffList: StaffUser[]; handleStaffAttendance: (action: "clock_in" | "clock_out") => void;
+    attendanceLogs: AttendanceLog[]; guests: GuestRecord[];
+    openingFloat: number; expectedCash: number; dayStats: DayStats; isRegisterOpen: boolean;
     handleSidebarAction: (actionId: string, permKey: string) => void;
-    history: any[]; handleOpenSession: (float: number) => Promise<void>;
-    setView: (view: any) => void; loadData: () => Promise<void>;
+    history: CashierOrder[]; handleOpenSession: (float: number) => Promise<void>;
+    setView: (view: MainView) => void; loadData: () => Promise<void>;
     visibleWidgets?: string[]; widgetOrder?: string[];
+    handlePrintKOT?: (order: CashierOrder) => void;
+    searchQuery?: string;
 }
 
 function CardHeader({ icon: Icon, title, subtitle, badge }: { icon: React.ElementType; title: string; subtitle?: string; badge?: React.ReactNode; }) {
@@ -62,11 +69,23 @@ export function BentoDashboard({
     activeOrders, takeawayOrders, attendanceStaffId, setAttendanceStaffId,
     staffList, handleStaffAttendance, attendanceLogs, openingFloat, expectedCash,
     dayStats, isRegisterOpen, handleSidebarAction, history, handleOpenSession,
-    setView, loadData, visibleWidgets,
+    setView, loadData, visibleWidgets, widgetOrder, handlePrintKOT, searchQuery
 }: Props) {
     const DEFAULT_WIDGETS = ["floor_map","takeaway_desk","kot_monitor","stock_availability","staff_attendance","trending_dish","cash_register"];
-    const active = visibleWidgets && visibleWidgets.length > 0 ? visibleWidgets : DEFAULT_WIDGETS;
-    const show = (id: string) => active.includes(id);
+    // Determine which widgets are visible (fallback to all defaults)
+    const visible = visibleWidgets && visibleWidgets.length > 0 ? visibleWidgets : DEFAULT_WIDGETS;
+    // Apply user-saved order: sort visible widgets by their position in widgetOrder, keeping unordered ones at end
+    const ordered = widgetOrder && widgetOrder.length > 0
+        ? [...visible].sort((a, b) => {
+            const ia = widgetOrder.indexOf(a);
+            const ib = widgetOrder.indexOf(b);
+            if (ia === -1 && ib === -1) return 0;
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+          })
+        : visible;
+    const show = (id: string) => ordered.includes(id);
 
     const [newFloat, setNewFloat] = useState(2500);
     const [showTakeawayModal, setShowTakeawayModal] = useState(false);
@@ -99,7 +118,7 @@ export function BentoDashboard({
         setUpdatingOrderId(orderId);
         const res = await advanceOrderStatus(orderId, next as any);
         setUpdatingOrderId(null);
-        if ("error" in res) alert(res.error); else await loadData();
+        if ("error" in res) toast.error(res.error || 'Failed to update order status'); else await loadData();
     };
 
     return (
@@ -126,7 +145,7 @@ export function BentoDashboard({
                         }
                     />
                     <div className="p-3.5">
-                        <AdminTablesLive onTableClick={t => { const ct = tables.find(x => x.id === t.id); if (ct) handleSelectTable(ct); }} readOnly={!hasPerm("manage_tables")} />
+                        <AdminTablesLive onTableClick={t => { const ct = tables.find(x => x.id === t.id); if (ct) handleSelectTable(ct); }} readOnly={!hasPerm("manage_tables")} searchQuery={searchQuery} />
                     </div>
                 </div>
             )}
@@ -163,7 +182,7 @@ export function BentoDashboard({
                                             </div>
                                             <p className="text-[9px] text-gray-400 mt-0.5">{order.order_items.length} items &middot; {fmt(orderTotal(order))}</p>
                                         </div>
-                                        <button onClick={() => handleSelectTable({ id: `takeaway_${order.id}`, table_no: 0, status: "Occupied", customer_name: order.customer_name, customer_phone: order.customer_phone, orders: [order] })} className="bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] text-[9px] font-bold px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer">
+                                        <button onClick={() => handleSelectTable({ id: `takeaway_${order.id}`, table_no: 0, status: "Awaiting Settlement", currentBill: orderTotal(order), customer_name: order.customer_name, customer_phone: order.customer_phone, orders: [order], latestStatus: order.status })} className="bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] text-[9px] font-bold px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer">
                                             Bill <ArrowRight className="w-2.5 h-2.5 text-[#C9974A]" />
                                         </button>
                                     </div>
@@ -217,7 +236,12 @@ export function BentoDashboard({
                                                 </div>
                                             ))}
                                         </div>
-                                        <div className="flex gap-1 justify-end">
+                                        <div className="flex gap-1 justify-end items-center">
+                                            {handlePrintKOT && (
+                                                <button onClick={() => handlePrintKOT(order)} className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-[9px] rounded flex items-center gap-1 cursor-pointer border border-stone-200">
+                                                    <Printer className="w-2.5 h-2.5 text-[#C9974A]" /> KOT
+                                                </button>
+                                            )}
                                             {order.status === "pending" && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "confirmed")} className="px-2 py-0.5 bg-[#C9974A] hover:bg-[#b08139] text-[#4E1414] font-bold text-[9px] rounded cursor-pointer">Accept</button>}
                                             {["pending","confirmed"].includes(order.status) && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "preparing")} className="px-2 py-0.5 bg-[#4E1414] hover:bg-[#3d0f0f] text-[#F6EEDF] font-bold text-[9px] rounded flex items-center gap-1 cursor-pointer"><ChefHat className="w-2.5 h-2.5 text-[#C9974A]" /> Prep</button>}
                                             {order.status === "preparing" && <button disabled={isUpd} onClick={() => advanceKOT(order.id, "ready")} className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[9px] rounded flex items-center gap-1 cursor-pointer"><CheckCircle2 className="w-2.5 h-2.5" /> Ready</button>}

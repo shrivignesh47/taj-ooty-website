@@ -1,3 +1,14 @@
+export interface MenuItem {
+    id: string;
+    name: string;
+    price: number;
+    is_available: boolean;
+    is_veg: boolean;
+    stock_qty?: number | null;
+    category_id?: string | null;
+    categories?: { name: string } | null;
+}
+
 export interface CashierOrderItem {
     id: string;
     qty: number;
@@ -97,5 +108,5 @@ export interface BillingWorkspaceNavProps {
     activeTableCount: number;
     pendingSettlementCount: number;
     onlineOrderCount: number;
-    stats?: any;
+    stats?: DayStats;
 }
