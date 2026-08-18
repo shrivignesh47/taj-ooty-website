@@ -9,7 +9,7 @@ import {
     X, Trash2, Plus, Minus, Send, Search, Printer, AlertTriangle, 
     Loader2, Volume2, VolumeX, Edit3, ClipboardList, Info, LogOut, Phone, Shield, Clock, Download 
 } from 'lucide-react';
-import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier, addItemsToOrder, updateOrderItemQty, deleteOrderItem } from '@/features/ordering/actions/waiterActions';
+import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier, addItemsToOrder, updateOrderItemQty, deleteOrderItem, fetchWaiterDashboardData } from '@/features/ordering/actions/waiterActions';
 import { updateStaffSelf, resetStaffPassword } from '@/features/ordering/actions/staffActions';
 import { logoutStaff, verifyStaff } from '@/features/ordering/actions/auth';
 import { MenuCatalog, getLiveCatalog } from '@/features/ordering/api/getCatalog';
@@ -153,30 +153,13 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     // Data fetcher
     const fetchData = useCallback(async () => {
         try {
-            const [ordersRes, tablesRes] = await Promise.all([
-                supabase
-                    .from('orders')
-                    .select(`
-                        *,
-                        restaurant_tables (*),
-                        order_items (
-                            *,
-                            menu_items (name)
-                        ),
-                        order_status_history (
-                            status,
-                            changed_at
-                        )
-                    `)
-                    .order('created_at', { ascending: false }),
-                supabase
-                    .from('restaurant_tables')
-                    .select('*')
-                    .order('table_no')
-            ]);
-
-            if (ordersRes.data) setOrdersList(ordersRes.data as unknown as LiveOrder[]);
-            if (tablesRes.data) setTablesList(tablesRes.data as unknown as RestaurantTable[]);
+            const res = await fetchWaiterDashboardData();
+            if (res.success && res.orders) {
+                setOrdersList(res.orders as unknown as LiveOrder[]);
+                if (res.tables) setTablesList(res.tables as unknown as RestaurantTable[]);
+            } else if (!res.success) {
+                console.error('fetchWaiterDashboardData error:', res.error);
+            }
         } catch (err) {
             console.error('Failed to sync waiter data', err);
         } finally {
@@ -203,7 +186,12 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
         if (storedNewOrder !== null) setNewOrderSound(storedNewOrder !== 'false');
     }, [fetchData, posCatalog]);
 
-    // Realtime channel subscriptions
+    // Derived states
+    const pendingOrders = useMemo(() => ordersList.filter(o => ['pending', 'unconfirmed', 'placed'].includes(o.status?.toLowerCase())), [ordersList]);
+    const activeOrders = useMemo(() => ordersList.filter(o => ['confirmed', 'preparing', 'ready', 'kitchen'].includes(o.status?.toLowerCase())), [ordersList]);
+    const myActiveOrders = useMemo(() => activeOrders.filter(o => o.waiter_id === activeUser.id), [activeOrders, activeUser.id]);
+
+    // Realtime channel subscriptions & 3-second background polling
     useEffect(() => {
         const updatePermissions = async () => {
             const res = await verifyStaff();
@@ -227,7 +215,12 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             }
         };
 
-        // Realtime channels
+        // Fast 3-second fallback interval for 100% reliable order sync across devices
+        const interval = setInterval(() => {
+            fetchData();
+        }, 3000);
+
+        // Realtime WebSockets channels
         const channelPending = supabase.channel('waiter-pending')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchData(); updatePermissions(); })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => { fetchData(); })
@@ -252,6 +245,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
         channelTables.subscribe();
 
         return () => {
+            clearInterval(interval);
             supabase.removeChannel(channelPending);
             supabase.removeChannel(channelActive);
             supabase.removeChannel(channelTables);
@@ -268,11 +262,6 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
         }
         prevPendingCount.current = pendingCount;
     }, [ordersList, soundAlerts, newOrderSound]);
-
-    // Derived states
-    const pendingOrders = useMemo(() => ordersList.filter(o => o.status === 'pending'), [ordersList]);
-    const activeOrders = useMemo(() => ordersList.filter(o => ['confirmed', 'preparing', 'ready'].includes(o.status)), [ordersList]);
-    const myActiveOrders = useMemo(() => activeOrders.filter(o => o.waiter_id === activeUser.id), [activeOrders, activeUser.id]);
 
     const historyOrders = useMemo(() => {
         return ordersList.filter(o => {

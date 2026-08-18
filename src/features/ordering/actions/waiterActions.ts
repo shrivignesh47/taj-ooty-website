@@ -1,13 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
 
-const adminEdge = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const adminEdge = supabaseAdmin;
 
 export async function acceptAndConfirmOrder(
     orderId: string, 
@@ -412,5 +409,39 @@ export async function getOrCreateTableAndCheckOccupied(tableNo: number) {
             return { success: false, error: 'This table already has an active order' };
         }
         return { success: false, error: e.message };
+    }
+}
+
+export async function fetchWaiterDashboardData() {
+    try {
+        const [ordersRes, tablesRes] = await Promise.all([
+            adminEdge
+                .from('orders')
+                .select(`
+                    *,
+                    restaurant_tables (*),
+                    order_items (
+                        *,
+                        menu_items (name)
+                    ),
+                    order_status_history (
+                        status,
+                        changed_at
+                    )
+                `)
+                .order('created_at', { ascending: false }),
+            adminEdge
+                .from('restaurant_tables')
+                .select('*')
+                .order('table_no')
+        ]);
+
+        return {
+            success: true,
+            orders: (ordersRes.data || []) as any[],
+            tables: (tablesRes.data || []) as any[]
+        };
+    } catch (err: any) {
+        return { success: false, error: err?.message || 'Failed to fetch waiter data' };
     }
 }
