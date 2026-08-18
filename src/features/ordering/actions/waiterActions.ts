@@ -445,3 +445,29 @@ export async function fetchWaiterDashboardData() {
         return { success: false, error: err?.message || 'Failed to fetch waiter data' };
     }
 }
+
+export async function fetchKitchenOrdersData() {
+    try {
+        const { data, error } = await adminEdge
+            .from('orders')
+            .select(`
+                *,
+                restaurant_tables (*),
+                order_items (
+                    *,
+                    menu_items (name, is_veg, category_id)
+                ),
+                order_status_history (
+                    status,
+                    changed_at
+                )
+            `)
+            .in('status', ['confirmed', 'preparing', 'ready', 'on_hold', 'served', 'billed', 'cancelled'])
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { success: true, orders: (data || []) as any[] };
+    } catch (err: any) {
+        return { success: false, error: err?.message || 'Failed to fetch kitchen orders' };
+    }
+}

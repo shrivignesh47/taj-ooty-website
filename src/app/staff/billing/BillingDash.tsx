@@ -568,7 +568,7 @@ export function BillingDash({ activeUser }: { activeUser: ActiveStaffUser }) {
                                                 onClick={async () => {
                                                     if (confirm('Cancel this online order?')) {
                                                         const res = await advanceOrderStatus(order.id, 'cancelled');
-                                                        if ('error' in res) toast.error(res.error || 'Failed to cancel order');
+                                                        if (!res.success && 'error' in res && typeof res.error === 'string') toast.error(res.error);
                                                         else s.loadData();
                                                     }
                                                 }}
@@ -592,7 +592,7 @@ export function BillingDash({ activeUser }: { activeUser: ActiveStaffUser }) {
                                                 <button
                                                     onClick={async () => {
                                                         const res = await advanceOrderStatus(order.id, 'confirmed');
-                                                        if ('error' in res) toast.error(res.error || 'Failed to confirm order');
+                                                        if (!res.success && 'error' in res && typeof res.error === 'string') toast.error(res.error);
                                                         else s.loadData();
                                                     }}
                                                     style={{ backgroundColor: brandColor }}
@@ -604,7 +604,7 @@ export function BillingDash({ activeUser }: { activeUser: ActiveStaffUser }) {
                                                 <button
                                                     onClick={async () => {
                                                         const res = await advanceOrderStatus(order.id, 'preparing');
-                                                        if ('error' in res) toast.error(res.error || 'Failed to update status');
+                                                        if (!res.success && 'error' in res && typeof res.error === 'string') toast.error(res.error);
                                                         else s.loadData();
                                                     }}
                                                     className="flex-1 bg-[#4E1414] text-[#F6EEDF] font-bold text-[9px] py-1 rounded flex items-center justify-center gap-1 shadow-2xs cursor-pointer"

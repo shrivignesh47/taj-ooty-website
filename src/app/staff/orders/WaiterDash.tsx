@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import { supabase } from '@/features/ordering/lib/supabase';
 import { 
     Inbox, Utensils, History, ChefHat, User, Settings, Bell, CheckCircle2, 
@@ -135,7 +135,8 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     const [showNotifications, setShowNotifications] = useState(false);
 
     // History filter
-    const [historyPeriod, setHistoryPeriod] = useState<'today' | 'yesterday' | 'week'>('today');
+    const [historyPeriod, setHistoryPeriod] = useState<'today' | 'yesterday' | 'week' | 'all'>('today');
+    const [historySearchQuery, setHistorySearchQuery] = useState('');
     const [expandedHistoryOrder, setExpandedHistoryOrder] = useState<string | null>(null);
 
     // Assigned Table Detail Modal
@@ -215,10 +216,10 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             }
         };
 
-        // Fast 3-second fallback interval for 100% reliable order sync across devices
+        // 10-second background fallback interval alongside instant WebSockets
         const interval = setInterval(() => {
             fetchData();
-        }, 3000);
+        }, 10000);
 
         // Realtime WebSockets channels
         const channelPending = supabase.channel('waiter-pending')
@@ -265,24 +266,57 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
 
     const historyOrders = useMemo(() => {
         return ordersList.filter(o => {
-            if (!['billed', 'cancelled', 'served'].includes(o.status)) return false;
-            
-            const date = new Date(o.created_at);
-            const now = new Date();
-            
-            if (historyPeriod === 'today') {
-                return date.toDateString() === now.toDateString();
-            } else if (historyPeriod === 'yesterday') {
-                const yesterday = new Date();
-                yesterday.setDate(now.getDate() - 1);
-                return date.toDateString() === yesterday.toDateString();
-            } else {
-                const oneWeekAgo = new Date();
-                oneWeekAgo.setDate(now.getDate() - 7);
-                return date >= oneWeekAgo;
+            const st = (o.status || '').toLowerCase();
+            if (!['billed', 'cancelled', 'served', 'completed', 'paid'].includes(st)) return false;
+
+            // Search filter query
+            if (historySearchQuery.trim()) {
+                const q = historySearchQuery.toLowerCase().trim();
+                const tableStr = `t-${o.restaurant_tables?.table_no || ''}`.toLowerCase();
+                const tableNumStr = `${o.restaurant_tables?.table_no || ''}`;
+                const custStr = (o.customer_name || '').toLowerCase();
+                const phoneStr = (o.customer_phone || '').toLowerCase();
+                const idStr = (o.id || '').toLowerCase();
+                const matchesItem = (o.order_items || []).some(i => (i.menu_items?.name || '').toLowerCase().includes(q));
+
+                if (!tableStr.includes(q) && !tableNumStr.includes(q) && !custStr.includes(q) && !phoneStr.includes(q) && !idStr.includes(q) && !matchesItem) {
+                    return false;
+                }
             }
+
+            if (historyPeriod === 'all') return true;
+
+            const orderDate = new Date(o.created_at);
+            const now = new Date();
+
+            const orderYMD = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+            const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+            const yesterdayDate = new Date();
+            yesterdayDate.setDate(now.getDate() - 1);
+            const yesterdayYMD = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
+
+            if (historyPeriod === 'today') {
+                return orderYMD === todayYMD;
+            } else if (historyPeriod === 'yesterday') {
+                return orderYMD === yesterdayYMD;
+            } else if (historyPeriod === 'week') {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                return orderDate >= sevenDaysAgo;
+            }
+            return true;
         });
-    }, [ordersList, historyPeriod]);
+    }, [ordersList, historyPeriod, historySearchQuery]);
+
+    const historyRevenue = useMemo(() => {
+        return historyOrders
+            .filter(o => ['billed', 'completed', 'paid'].includes((o.status || '').toLowerCase()))
+            .reduce((sum, o) => {
+                const total = o.order_items?.reduce((s, i) => s + (i.price_at_order * i.qty), 0) || 0;
+                return sum + total;
+            }, 0);
+    }, [historyOrders]);
 
     // Group active tables
     const tablesWithStatus = useMemo(() => {
@@ -599,13 +633,6 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
             item.categories?.name?.toLowerCase().includes(menuSearchQuery.toLowerCase())
         );
     }, [posCatalog, menuSearchQuery]);
-
-    // Active orders totals
-    const historyRevenue = useMemo(() => {
-        return historyOrders
-            .filter(o => o.status === 'billed')
-            .reduce((sum, o) => sum + (o.order_items?.reduce((s, i) => s + (i.price_at_order * i.qty), 0) || 0), 0);
-    }, [historyOrders]);
 
     return (
         <div className={`
@@ -1019,95 +1046,177 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
                         {/* TAB 3: History */}
                         {tab === 'history' && (
                             <div className="bg-white rounded-2xl shadow-xl border border-[#C9974A]/20 p-4 md:p-6 space-y-6">
-                                {/* Summary banner */}
-                                <div className="bg-[#F6EEDF]/40 border border-[#C9974A]/20 p-4 rounded-xl flex flex-wrap justify-between items-center gap-3">
-                                    <div>
-                                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Completed Sales Summary</p>
-                                        <h3 className="font-display font-black text-lg text-[#4E1414]">
-                                            Today: {historyOrders.filter(o => o.status === 'billed').length} orders · ₹{historyRevenue.toLocaleString()} total
-                                        </h3>
+                                {/* Summary Bento Header */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="bg-[#F6EEDF]/60 border border-[#C9974A]/30 p-4 rounded-2xl flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Completed Orders</p>
+                                            <h3 className="font-display font-black text-2xl text-[#4E1414] mt-1">
+                                                {historyOrders.filter(o => ['billed', 'completed', 'paid', 'served'].includes((o.status || '').toLowerCase())).length}
+                                            </h3>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-full bg-[#4E1414]/10 flex items-center justify-center text-[#4E1414] font-black">
+                                            📋
+                                        </div>
                                     </div>
-                                    <button 
-                                        onClick={handleExportCSV}
-                                        className="bg-[#4E1414] text-[#F6EEDF] hover:bg-[#350C0C] font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors shadow-sm"
-                                    >
-                                        <Download className="w-3.5 h-3.5" /> Export CSV
-                                    </button>
-                                </div>
-
-                                {/* Date pills */}
-                                <div className="flex gap-2 border-b border-gray-100 pb-4">
-                                    {(['today', 'yesterday', 'week'] as const).map(p => (
+                                    <div className="bg-emerald-50/80 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Filtered Sales</p>
+                                            <h3 className="font-display font-black text-2xl text-emerald-950 mt-1">
+                                                ₹{historyRevenue.toLocaleString('en-IN')}
+                                            </h3>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-full bg-emerald-600/10 flex items-center justify-center text-emerald-700 font-black">
+                                            ₹
+                                        </div>
+                                    </div>
+                                    <div className="bg-rose-50/80 border border-rose-200 p-4 rounded-2xl flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Cancelled Orders</p>
+                                            <h3 className="font-display font-black text-2xl text-rose-950 mt-1">
+                                                {historyOrders.filter(o => (o.status || '').toLowerCase() === 'cancelled').length}
+                                            </h3>
+                                        </div>
                                         <button 
-                                            key={p}
-                                            onClick={() => setHistoryPeriod(p)}
-                                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${historyPeriod === p ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                            onClick={handleExportCSV}
+                                            className="bg-[#4E1414] text-[#F6EEDF] hover:bg-[#350C0C] font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors shadow-sm"
                                         >
-                                            {p}
+                                            <Download className="w-3.5 h-3.5" /> CSV
                                         </button>
-                                    ))}
+                                    </div>
                                 </div>
 
-                                {/* Table */}
-                                <div className="overflow-x-auto">
+                                {/* Filter Controls */}
+                                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-b border-stone-200 pb-4">
+                                    {/* Date pills */}
+                                    <div className="flex flex-wrap gap-2">
+                                        {([
+                                            { id: 'today', label: 'Today' },
+                                            { id: 'yesterday', label: 'Yesterday' },
+                                            { id: 'week', label: 'This Week' },
+                                            { id: 'all', label: 'All Orders' }
+                                        ] as const).map(p => (
+                                            <button 
+                                                key={p.id}
+                                                onClick={() => setHistoryPeriod(p.id)}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                                                    historyPeriod === p.id 
+                                                        ? 'bg-[#4E1414] text-[#F6EEDF] shadow-md scale-105' 
+                                                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                                }`}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Search Input */}
+                                    <div className="relative">
+                                        <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                        <input 
+                                            type="text"
+                                            placeholder="Search table, customer, item..."
+                                            value={historySearchQuery}
+                                            onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                            className="w-full sm:w-64 pl-9 pr-4 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#C9974A]"
+                                        />
+                                        {historySearchQuery && (
+                                            <button 
+                                                onClick={() => setHistorySearchQuery('')}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 font-bold text-xs"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Order Table */}
+                                <div className="overflow-x-auto rounded-xl border border-stone-200">
                                     <table className="w-full text-left text-xs border-collapse">
                                         <thead>
-                                            <tr className="border-b border-gray-200 text-gray-400 font-bold uppercase text-[9px] tracking-wider pb-2">
-                                                <th className="pb-3 font-bold">Time</th>
-                                                <th className="pb-3 font-bold">Table</th>
-                                                <th className="pb-3 font-bold">Customer</th>
-                                                <th className="pb-3 font-bold">Items Count</th>
-                                                <th className="pb-3 font-bold">Total</th>
-                                                <th className="pb-3 font-bold text-right">Status</th>
+                                            <tr className="bg-stone-100/80 border-b border-stone-200 text-stone-600 font-black uppercase text-[10px] tracking-wider">
+                                                <th className="py-3 px-4">Time & Date</th>
+                                                <th className="py-3 px-4">Table</th>
+                                                <th className="py-3 px-4">Customer</th>
+                                                <th className="py-3 px-4">Items</th>
+                                                <th className="py-3 px-4">Total</th>
+                                                <th className="py-3 px-4 text-right">Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100">
+                                        <tbody className="divide-y divide-stone-200 bg-white">
                                             {historyOrders.map(order => {
                                                 const total = order.order_items?.reduce((sum, i) => sum + (i.price_at_order * i.qty), 0) || 0;
                                                 const count = order.order_items?.reduce((sum, i) => sum + i.qty, 0) || 0;
                                                 const isExpanded = expandedHistoryOrder === order.id;
+                                                const st = (order.status || '').toLowerCase();
+                                                const orderDate = new Date(order.created_at);
+                                                const timeStr = orderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                                const dateStr = orderDate.toLocaleDateString([], { day: '2-digit', month: 'short' });
 
                                                 return (
-                                                    <tr 
-                                                        key={order.id}
-                                                        onClick={() => setExpandedHistoryOrder(isExpanded ? null : order.id)}
-                                                        className="hover:bg-gray-50/50 cursor-pointer"
-                                                    >
-                                                        <td className="py-3 font-medium text-gray-500">
-                                                            {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </td>
-                                                        <td className="py-3 font-black text-[#4E1414]">T-{order.restaurant_tables?.table_no || '?'}</td>
-                                                        <td className="py-3 font-medium text-gray-700">{order.customer_name}</td>
-                                                        <td className="py-3 font-bold text-gray-500">{count} items</td>
-                                                        <td className="py-3 font-black text-[#4E1414]">₹{total}</td>
-                                                        <td className="py-3 text-right">
-                                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded ${
-                                                                order.status === 'billed' ? 'bg-green-100 text-green-800' :
-                                                                order.status === 'served' ? 'bg-teal-100 text-teal-800' :
-                                                                'bg-red-100 text-red-800'
-                                                            }`}>
-                                                                {order.status}
-                                                            </span>
-
-                                                            {/* Dropdown Items list inside expanding block */}
-                                                            {isExpanded && (
-                                                                <div className="text-left mt-2 bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1 block w-full max-w-sm absolute right-4 z-10 shadow-lg">
-                                                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest border-b pb-1">Receipt details</p>
-                                                                    {order.order_items.map((item, idx) => (
-                                                                        <div key={idx} className="flex justify-between text-[11px] font-medium text-gray-600">
-                                                                            <span>{item.qty}x {item.menu_items?.name}</span>
-                                                                            <span>₹{item.price_at_order * item.qty}</span>
+                                                    <Fragment key={order.id}>
+                                                        <tr 
+                                                            onClick={() => setExpandedHistoryOrder(isExpanded ? null : order.id)}
+                                                            className={`hover:bg-stone-50 cursor-pointer transition-colors ${isExpanded ? 'bg-amber-50/50 font-medium' : ''}`}
+                                                        >
+                                                            <td className="py-3.5 px-4 font-semibold text-stone-700">
+                                                                <span className="font-bold text-[#4E1414]">{timeStr}</span>
+                                                                <span className="text-[10px] text-stone-400 block font-normal">{dateStr}</span>
+                                                            </td>
+                                                            <td className="py-3.5 px-4">
+                                                                <span className="inline-block bg-[#4E1414] text-[#F6EEDF] font-black px-2.5 py-1 rounded-lg text-xs">
+                                                                    {order.restaurant_tables?.table_no ? `T-${order.restaurant_tables.table_no}` : 'Takeaway'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-3.5 px-4 font-semibold text-stone-800">
+                                                                {order.customer_name || 'Guest'}
+                                                                {order.customer_phone && <span className="text-[10px] text-stone-400 block font-normal">{order.customer_phone}</span>}
+                                                            </td>
+                                                            <td className="py-3.5 px-4 font-bold text-stone-600">{count} items</td>
+                                                            <td className="py-3.5 px-4 font-black text-[#4E1414] text-sm">₹{total.toLocaleString('en-IN')}</td>
+                                                            <td className="py-3.5 px-4 text-right">
+                                                                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                                                                    ['billed', 'completed', 'paid'].includes(st) ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                                                    st === 'served' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
+                                                                    'bg-rose-100 text-rose-800 border border-rose-300'
+                                                                }`}>
+                                                                    {st}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                        {isExpanded && (
+                                                            <tr className="bg-amber-50/60 border-b border-amber-200">
+                                                                <td colSpan={6} className="p-4">
+                                                                    <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm space-y-3">
+                                                                        <div className="flex justify-between items-center border-b border-stone-100 pb-2">
+                                                                            <span className="text-xs font-black uppercase text-[#4E1414] tracking-wider">Order Items Details</span>
+                                                                            <span className="text-[10px] font-bold text-stone-400">ID: #{order.id.slice(-6)}</span>
                                                                         </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                    </tr>
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                            {order.order_items?.map((item, idx) => (
+                                                                                <div key={idx} className="flex justify-between items-center text-xs p-2 bg-stone-50 rounded-lg">
+                                                                                    <span className="font-semibold text-stone-800">{item.qty}× {item.menu_items?.name || 'Item'}</span>
+                                                                                    <span className="font-bold text-[#4E1414]">₹{(item.price_at_order * item.qty).toLocaleString('en-IN')}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center pt-2 border-t border-stone-100 text-xs">
+                                                                            <span className="text-stone-500 font-medium">Source: <strong className="text-stone-800 capitalize">{(order as any).source || 'dine_in'}</strong></span>
+                                                                            <span className="font-black text-[#4E1414] text-sm">Total: ₹{total.toLocaleString('en-IN')}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
                                                 );
                                             })}
                                             {historyOrders.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={6} className="text-center py-8 text-xs text-gray-400 italic">No orders found for this period.</td>
+                                                    <td colSpan={6} className="text-center py-12 text-xs text-stone-400 italic">
+                                                        No history orders matching your filters.
+                                                    </td>
                                                 </tr>
                                             )}
                                         </tbody>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/features/ordering/lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrCode, Plus, Trash2, X, Download, CheckCircle2, MoreVertical, Printer, Utensils, Clock, LayoutGrid, ChevronDown, Edit3 } from 'lucide-react';
-import { createTable, createCustomTable, renameTable, deleteTable } from '@/features/ordering/actions/adminActions';
+import { createTable, createCustomTable, renameTable, deleteTable, fetchAdminTablesLiveData } from '@/features/ordering/actions/adminActions';
 import { toast } from '@/features/ordering/lib/toast';
 import JSZip from 'jszip';
 
@@ -144,23 +144,35 @@ export function AdminTablesLive({ onTableClick, readOnly = false, searchQuery = 
     }, []);
 
     const loadData = useCallback(async () => {
-        const [tablesRes, ordersRes, staffRes] = await Promise.all([
-            supabase.from('restaurant_tables').select('*').order('table_no'),
-            supabase.from('orders')
-                .select('*, order_items(*, menu_items(name))')
-                .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served']),
-            supabase.from('staff_users').select('id, name'),
-        ]);
+        const res = await fetchAdminTablesLiveData();
+        let tablesData: any[] = [];
+        let activeOrders: any[] = [];
+        let staffList: any[] = [];
 
-        const staffList = staffRes.data ?? [];
-        const activeOrders: any[] = ordersRes.data ?? [];
+        if (res.success) {
+            tablesData = res.tables ?? [];
+            activeOrders = res.orders ?? [];
+            staffList = res.staff ?? [];
+        } else {
+            const [tablesRes, ordersRes, staffRes] = await Promise.all([
+                supabase.from('restaurant_tables').select('*').order('table_no'),
+                supabase.from('orders')
+                    .select('*, order_items(*, menu_items(name))')
+                    .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served']),
+                supabase.from('staff_users').select('id, name'),
+            ]);
+            tablesData = tablesRes.data ?? [];
+            activeOrders = ordersRes.data ?? [];
+            staffList = staffRes.data ?? [];
+        }
+
         const orderMap = new Map<string, any[]>();
         for (const o of activeOrders) {
             if (!orderMap.has(o.table_id)) orderMap.set(o.table_id, []);
             orderMap.get(o.table_id)!.push(o);
         }
 
-        const enriched: EnrichedTable[] = (tablesRes.data ?? []).map((t: any) => {
+        const enriched: EnrichedTable[] = tablesData.map((t: any) => {
             const tableOrders = orderMap.get(t.id) ?? [];
             const latestOrder = tableOrders[0];
             const waiter = staffList.find((s: any) => s.id === t.assigned_waiter_id);
@@ -206,12 +218,22 @@ export function AdminTablesLive({ onTableClick, readOnly = false, searchQuery = 
 
     useEffect(() => {
         loadData();
+
+        // 10-second background fallback interval (WebSockets handle instant 0ms updates)
+        const pollInterval = setInterval(() => {
+            loadData();
+        }, 10000);
+
         const channelName = `admin-tables-watch-${Math.random()}`;
         const channel = supabase
             .channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadData)
             .subscribe();
-        return () => { supabase.removeChannel(channel); };
+
+        return () => {
+            clearInterval(pollInterval);
+            supabase.removeChannel(channel);
+        };
     }, [loadData]);
 
     const handleAddTableAuto = async () => {

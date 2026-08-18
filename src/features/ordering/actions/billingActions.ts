@@ -317,3 +317,40 @@ export async function transferTableOrder(fromTableId: string, toTableId: string)
     return { success: true };
 }
 
+export async function fetchBillingDashboardData() {
+    try {
+        const [tablesRes, activeOrdersRes, historyOrdersRes, menuRes, staffRes, attendanceRes, settingsRes, rolesRes] = await Promise.all([
+            supabaseAdmin.from('restaurant_tables').select('*').order('table_no'),
+            supabaseAdmin.from('orders').select(`
+                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                restaurant_tables(table_no, id),
+                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+            `).in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']).order('created_at', { ascending: false }),
+            supabaseAdmin.from('orders').select(`
+                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                restaurant_tables(table_no, id),
+                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+            `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
+            supabaseAdmin.from('menu_items').select('*, categories(name)').order('name'),
+            supabaseAdmin.from('staff_users').select('*, roles(name)').order('name'),
+            supabaseAdmin.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
+            supabaseAdmin.from('restaurant_settings').select('*').limit(1).single(),
+            supabaseAdmin.from('roles').select('*, role_permissions(permissions(key))')
+        ]);
+
+        return {
+            success: true,
+            tables: tablesRes.data || [],
+            activeOrders: activeOrdersRes.data || [],
+            historyOrders: historyOrdersRes.data || [],
+            menuItems: menuRes.data || [],
+            staff: staffRes.data || [],
+            attendance: attendanceRes.data || [],
+            settings: settingsRes.data || null,
+            roles: rolesRes.data || []
+        };
+    } catch (err: any) {
+        return { success: false, error: err?.message || 'Failed to fetch billing data' };
+    }
+}
+

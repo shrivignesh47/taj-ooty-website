@@ -40,23 +40,30 @@ export function CustomerOrderStatus({ orderId }: { orderId: string }) {
 
         fetchInitial();
 
-        // Subscribe to live updates for this specific order
+        // 3-second fallback interval for 100% reliable customer order status sync
+        const pollInterval = setInterval(() => {
+            fetchInitial();
+        }, 3000);
+
+        // Subscribe to live WebSockets updates for this specific order
         const channel = supabase
             .channel(`customer_order_${orderId}`)
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+                { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
                 (payload) => {
-                    if (payload.new && payload.new.status) {
-                        setStatus(payload.new.status);
+                    fetchInitial();
+                    if (payload.new && (payload.new as any).status) {
+                        setStatus((payload.new as any).status);
                     }
                 }
             )
             .subscribe();
 
-        // Explicit Realtime cleanup
+        // Explicit Realtime & Timer cleanup
         return () => {
             isMounted = false;
+            clearInterval(pollInterval);
             supabase.removeChannel(channel);
         };
     }, [orderId, customerPhone]);

@@ -118,7 +118,7 @@ export function BentoDashboard({
         setUpdatingOrderId(orderId);
         const res = await advanceOrderStatus(orderId, next as any);
         setUpdatingOrderId(null);
-        if ("error" in res) toast.error(res.error || 'Failed to update order status'); else await loadData();
+        if (!res.success && 'error' in res && typeof res.error === 'string') toast.error(res.error); else await loadData();
     };
 
     return (

@@ -744,3 +744,24 @@ export async function applyOrderItemDiscount(orderItemId: string, discountPercen
     }
 }
 
+export async function fetchAdminTablesLiveData() {
+    try {
+        const [tablesRes, ordersRes, staffRes] = await Promise.all([
+            admin.from('restaurant_tables').select('*').order('table_no'),
+            admin.from('orders')
+                .select('*, order_items(*, menu_items(name))')
+                .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'served']),
+            admin.from('staff_users').select('id, name'),
+        ]);
+
+        return {
+            success: true,
+            tables: (tablesRes.data || []) as any[],
+            orders: (ordersRes.data || []) as any[],
+            staff: (staffRes.data || []) as any[]
+        };
+    } catch (err: any) {
+        return { success: false, error: err?.message || 'Failed to fetch admin tables' };
+    }
+}
+

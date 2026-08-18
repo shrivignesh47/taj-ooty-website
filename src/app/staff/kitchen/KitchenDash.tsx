@@ -420,21 +420,21 @@ export function KitchenDash() {
 
     const confirmedOrders = useMemo(
         () => stationFilteredOrders
-            .filter((order) => order.status === 'confirmed' && (activeFilter === 'All' || activeFilter === 'New'))
+            .filter((order) => (order.status || '').toLowerCase() === 'confirmed' && (activeFilter === 'All' || activeFilter === 'New'))
             .sort((a, b) => new Date(getStatusTimestamp(a, 'confirmed')).getTime() - new Date(getStatusTimestamp(b, 'confirmed')).getTime()),
         [stationFilteredOrders, activeFilter]
     );
 
     const preparingOrders = useMemo(
         () => stationFilteredOrders
-            .filter((order) => order.status === 'preparing' && (activeFilter === 'All' || activeFilter === 'Preparing'))
+            .filter((order) => (order.status || '').toLowerCase() === 'preparing' && (activeFilter === 'All' || activeFilter === 'Preparing'))
             .sort((a, b) => new Date(getStatusTimestamp(a, 'confirmed')).getTime() - new Date(getStatusTimestamp(b, 'confirmed')).getTime()),
         [stationFilteredOrders, activeFilter]
     );
 
     const recentReadyOrders = useMemo(
         () => stationFilteredOrders
-            .filter((order) => order.status === 'ready' && (activeFilter === 'All' || activeFilter === 'Ready'))
+            .filter((order) => (order.status || '').toLowerCase() === 'ready' && (activeFilter === 'All' || activeFilter === 'Ready'))
             .filter((order) => !kdsSettings.autoBump || (now - new Date(getStatusTimestamp(order, 'ready')).getTime() < 30_000))
             .sort((a, b) => new Date(getStatusTimestamp(b, 'ready')).getTime() - new Date(getStatusTimestamp(a, 'ready')).getTime()),
         [now, stationFilteredOrders, activeFilter, kdsSettings.autoBump]
@@ -442,14 +442,14 @@ export function KitchenDash() {
 
     const onHoldOrders = useMemo(
         () => stationFilteredOrders
-            .filter((order) => order.status === 'on_hold' && (activeFilter === 'All' || activeFilter === 'On Hold'))
+            .filter((order) => (order.status || '').toLowerCase() === 'on_hold' && (activeFilter === 'All' || activeFilter === 'On Hold'))
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
         [stationFilteredOrders, activeFilter]
     );
 
     const completedOrders = useMemo(
         () => stationFilteredOrders
-            .filter((order) => (activeFilter === 'All' || activeFilter === 'History' || activeFilter === 'Completed') && (['served', 'billed', 'cancelled'].includes(order.status) || (order.status === 'ready' && kdsSettings.autoBump && (now - new Date(getStatusTimestamp(order, 'ready')).getTime() >= 30_000))))
+            .filter((order) => (activeFilter === 'All' || activeFilter === 'History' || activeFilter === 'Completed') && (['served', 'billed', 'cancelled'].includes((order.status || '').toLowerCase()) || ((order.status || '').toLowerCase() === 'ready' && kdsSettings.autoBump && (now - new Date(getStatusTimestamp(order, 'ready')).getTime() >= 30_000))))
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
         [stationFilteredOrders, activeFilter, kdsSettings.autoBump, now]
     );
@@ -617,9 +617,6 @@ export function KitchenDash() {
             <header className="sticky top-0 z-40 bg-[#1a0a0a] h-14 border-b border-[#C9974A]/20 px-4 lg:px-6 flex items-center justify-between shadow-md">
                 {/* Left: "🍳 Kitchen Display" text white + station dropdown */}
                 <div className="flex items-center gap-3">
-                    <Link href="/staff/dashboard" title="Back to Stations Hub" className="text-white hover:text-[#C9974A] transition-colors font-bold text-xs bg-[#2a0f0f] px-2 py-1 rounded border border-[#C9974A]/30">
-                        ← Hub
-                    </Link>
                     <h1 className="text-white font-black text-base md:text-lg tracking-wide flex items-center gap-2 select-none">
                         🍳 Kitchen Display
                     </h1>
@@ -637,7 +634,6 @@ export function KitchenDash() {
                         <option value="Starters">Starters</option>
                         <option value="Beverages">Beverages</option>
                     </select>
-                    {/* Note: selecting a station filters tickets to only that station's categories (mapping defined in Prompt 5) */}
                 </div>
 
                 {/* Center: live clock HH:MM:SS updating every second, white, monospace font */}
@@ -1481,10 +1477,10 @@ function KitchenTicketCard({
                             await startKitchenOrder(order.id);
                             setBusy(false);
                         }}
-                        className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-black font-black py-2.5 px-3 text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 font-black py-3 px-4 text-xs shadow-md transition-all disabled:opacity-50 cursor-pointer uppercase tracking-wider"
                     >
-                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5" />}
-                        <span>{order.status === 'on_hold' ? '▶ Resume Prep' : '▶ Start Prep'}</span>
+                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4 text-stone-950" />}
+                        <span>{order.status === 'on_hold' ? '▶ Resume Preparation' : '▶ Start Preparation'}</span>
                     </button>
                 )}
 
@@ -1497,25 +1493,26 @@ function KitchenTicketCard({
                             await markKitchenOrderReady(order.id);
                             setBusy(false);
                         }}
-                        className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-black py-2.5 px-3 text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black py-3 px-4 text-xs shadow-md shadow-emerald-900/10 transition-all disabled:opacity-50 cursor-pointer uppercase tracking-wider"
                     >
-                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                        <span>✓ Mark Ready</span>
+                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        <span>✓ Mark Ready (KOT Done)</span>
                     </button>
                 )}
 
-                {order.status !== 'on_hold' && order.status !== 'ready' && order.status !== 'served' && order.status !== 'billed' && order.status !== 'cancelled' && (
+                {order.status === 'ready' && (
                     <button
                         type="button"
                         disabled={busy}
                         onClick={async () => {
                             setBusy(true);
-                            await advanceOrderStatus(order.id, 'on_hold');
+                            await advanceOrderStatus(order.id, 'served');
                             setBusy(false);
                         }}
-                        className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-black py-3 px-4 text-xs shadow-md transition-all disabled:opacity-50 cursor-pointer uppercase tracking-wider"
                     >
-                        <span>⏸ Hold</span>
+                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        <span>Bump Ticket (Served)</span>
                     </button>
                 )}
 
@@ -1530,21 +1527,21 @@ function KitchenTicketCard({
                                 setBusy(false);
                             }
                         }}
-                        className={`${order.status === 'on_hold' ? 'col-span-2' : ''} flex items-center justify-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer`}
+                        className="col-span-2 flex items-center justify-center gap-1.5 rounded-xl bg-rose-600/10 hover:bg-rose-600 hover:text-white border border-rose-200 text-rose-700 font-bold py-2 px-3 text-xs shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                     >
-                        <span>✕ Cancel</span>
+                        <span>✕ Cancel Ticket</span>
                     </button>
                 )}
 
                 {order.status === 'ready' && (
-                    <div className="col-span-2 flex items-center justify-center gap-2 rounded-lg bg-green-100 py-2.5 px-3 text-xs font-black text-green-700">
+                    <div className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-100 py-3 px-4 text-xs font-black text-emerald-800 border border-emerald-300">
                         <CheckCircle2 className="h-4 w-4" />
                         <span>Ready for Waiter Pickup</span>
                     </div>
                 )}
 
                 {(order.status === 'served' || order.status === 'billed') && (
-                    <div className="col-span-2 flex items-center justify-between rounded-lg bg-gray-800 py-2.5 px-3 text-xs font-bold text-gray-200">
+                    <div className="col-span-2 flex items-center justify-between rounded-xl bg-stone-900 py-3 px-4 text-xs font-bold text-stone-200">
                         <div className="flex items-center gap-2">
                             <CheckCircle2 className="h-4 w-4 text-green-400" />
                             <span>Order Completed ({order.status.toUpperCase()})</span>

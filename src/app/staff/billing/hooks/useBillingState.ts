@@ -5,7 +5,7 @@ import { supabase } from '@/features/ordering/lib/supabase';
 import { orderTotal } from '../components/utils';
 import {
     settleBillWithPayment, settleBillWithSplitPayment, openRegisterSession, closeRegisterSession,
-    getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown, transferTableOrder
+    getActiveRegisterSession, addPettyExpense, getSessionExpenses, getTodayPaymentBreakdown, transferTableOrder, fetchBillingDashboardData
 } from '@/features/ordering/actions/billingActions';
 import { getDashboardPreferences } from '@/features/ordering/actions/dashboardPrefActions';
 import { normalizeStaffRole } from '@/features/ordering/config/widgetCatalog';
@@ -139,33 +139,62 @@ export function useBillingState(activeUser: ActiveStaffUser) {
     const loadData = useCallback(async () => {
         setRefreshing(true);
 
-        const [
-            { data: rawTables },
-            { data: rawOrders },
-            { data: rawHistory },
-            { data: rawMenu },
-            { data: rawStaff },
-            { data: rawAttendance },
-            { data: rawSettings },
-            { data: rawRoles }
-        ] = await Promise.all([
-            supabase.from('restaurant_tables').select('*').order('table_no'),
-            supabase.from('orders').select(`
-                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                restaurant_tables(table_no, id),
-                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
-            `).in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']).order('created_at', { ascending: false }),
-            supabase.from('orders').select(`
-                id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                restaurant_tables(table_no, id),
-                order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
-            `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
-            supabase.from('menu_items').select('*, categories(name)').order('name'),
-            supabase.from('staff_users').select('*, roles(name)').order('name'),
-            supabase.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
-            supabase.from('restaurant_settings').select('*').limit(1).single(),
-            supabase.from('roles').select('*, role_permissions(permissions(key))')
-        ]);
+        const bldRes = await fetchBillingDashboardData();
+        let rawTables: any[] = [];
+        let rawOrders: any[] = [];
+        let rawHistory: any[] = [];
+        let rawMenu: any[] = [];
+        let rawStaff: any[] = [];
+        let rawAttendance: any[] = [];
+        let rawSettings: any = null;
+        let rawRoles: any[] = [];
+
+        if (bldRes.success) {
+            rawTables = bldRes.tables ?? [];
+            rawOrders = bldRes.activeOrders ?? [];
+            rawHistory = bldRes.historyOrders ?? [];
+            rawMenu = bldRes.menuItems ?? [];
+            rawStaff = bldRes.staff ?? [];
+            rawAttendance = bldRes.attendance ?? [];
+            rawSettings = bldRes.settings ?? null;
+            rawRoles = bldRes.roles ?? [];
+        } else {
+            const [
+                { data: t },
+                { data: a },
+                { data: h },
+                { data: m },
+                { data: s },
+                { data: att },
+                { data: set },
+                { data: r }
+            ] = await Promise.all([
+                supabase.from('restaurant_tables').select('*').order('table_no'),
+                supabase.from('orders').select(`
+                    id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                    restaurant_tables(table_no, id),
+                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+                `).in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']).order('created_at', { ascending: false }),
+                supabase.from('orders').select(`
+                    id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
+                    restaurant_tables(table_no, id),
+                    order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
+                `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
+                supabase.from('menu_items').select('*, categories(name)').order('name'),
+                supabase.from('staff_users').select('*, roles(name)').order('name'),
+                supabase.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
+                supabase.from('restaurant_settings').select('*').limit(1).single(),
+                supabase.from('roles').select('*, role_permissions(permissions(key))')
+            ]);
+            rawTables = t ?? [];
+            rawOrders = a ?? [];
+            rawHistory = h ?? [];
+            rawMenu = m ?? [];
+            rawStaff = s ?? [];
+            rawAttendance = att ?? [];
+            rawSettings = set;
+            rawRoles = r ?? [];
+        }
 
         if (rawRoles) {
             setRolesList(rawRoles);
@@ -371,12 +400,21 @@ export function useBillingState(activeUser: ActiveStaffUser) {
         loadDataRef.current();
         loadShiftData();
 
+        // 10-second background fallback interval (WebSockets handle instant 0ms updates)
+        const interval = setInterval(() => {
+            loadDataRef.current();
+        }, 10000);
+
         const ch = supabase.channel('cashier-petpooja-v4-realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadDataRef.current())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadDataRef.current())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadDataRef.current())
             .subscribe();
-        return () => { supabase.removeChannel(ch); };
+
+        return () => {
+            clearInterval(interval);
+            supabase.removeChannel(ch);
+        };
     }, [loadShiftData]);
 
     useEffect(() => {
@@ -575,12 +613,17 @@ ${pointsToRedeem > 0 ? `<div class="row"><span>Points Redeemed (${pointsToRedeem
     };
 
     const handleSettlePayment = async (t: TableView) => {
-        if (!canSettleBills) {
-            triggerPermissionDenied('generate_bills');
-            return;
-        }
         setSubmittingPayment(true);
         try {
+            // Auto-open register shift if register is closed
+            if (!isRegisterOpen) {
+                const regRes = await openRegisterSession(0);
+                if (regRes.success && regRes.session) {
+                    setIsRegisterOpen(true);
+                    setRegisterSessionId(regRes.session.id);
+                }
+            }
+
             if (settings.autoPrint) {
                 handlePrintBill(t);
             }

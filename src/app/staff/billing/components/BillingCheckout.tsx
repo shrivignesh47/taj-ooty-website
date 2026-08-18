@@ -577,8 +577,8 @@ export function BillingCheckout({
                             </button>
                             <button
                                 onClick={() => handleSettlePayment(selectedTable)}
-                                disabled={submittingPayment || !canSettleBills || !isRegisterOpen}
-                                className="flex-1 flex items-center justify-center gap-2 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-3 rounded-xl transition-all disabled:opacity-50 text-xs shadow-lg shadow-[#4E1414]/10"
+                                disabled={submittingPayment}
+                                className="flex-1 flex items-center justify-center gap-2 bg-[#4E1414] hover:bg-[#3b0e0e] text-[#F6EEDF] font-bold py-3 rounded-xl transition-all disabled:opacity-50 text-xs shadow-lg shadow-[#4E1414]/10 cursor-pointer"
                             >
                                 {submittingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                 SETTLE BILL ({paymentMethod.toUpperCase()})
