@@ -124,12 +124,7 @@ export function NotificationCenter({ currentStaffId = 'cashier_desk', currentRol
         setLoading(true);
         loadNotifications().then(() => setLoading(false));
 
-        // Poll every 3 seconds for instant cross-tab / cross-device delivery
-        const pollInterval = setInterval(() => {
-            loadNotifications();
-        }, 3000);
-
-        // Real-time subscription fallback
+        // Real-time subscription for instant notification push alerts without background polling spam
         const channel = supabase
             .channel('staff-activity-notifications')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'staff_activity_log', filter: 'action=eq.STAFF_NOTIFICATION' }, () => {
@@ -138,7 +133,6 @@ export function NotificationCenter({ currentStaffId = 'cashier_desk', currentRol
             .subscribe();
 
         return () => {
-            clearInterval(pollInterval);
             supabase.removeChannel(channel);
         };
     }, [loadNotifications]);
@@ -326,7 +320,12 @@ export function NotificationCenter({ currentStaffId = 'cashier_desk', currentRol
 
                 {/* Bell Icon Trigger */}
                 <button
-                    onClick={() => setIsOpen(prev => !prev)}
+                    onClick={() => {
+                        setIsOpen(prev => {
+                            if (!prev) loadNotifications();
+                            return !prev;
+                        });
+                    }}
                     className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#C9974A] relative transition-all cursor-pointer group"
                     title="Staff Push Notification Center"
                 >

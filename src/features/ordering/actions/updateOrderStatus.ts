@@ -6,7 +6,13 @@ import { revalidatePath } from 'next/cache';
 
 async function requireStaffIdentity() {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+    } catch (_) {
+        user = null;
+    }
 
     if (!user) {
         return { error: 'Unauthorized. Staff session required to mutate order status.' };

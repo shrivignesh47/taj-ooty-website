@@ -37,7 +37,13 @@ export async function proxy(request: NextRequest) {
         }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+    } catch (_) {
+        user = null;
+    }
 
     const isStaffRoute = request.nextUrl.pathname.startsWith('/staff');
     const isLoginRoute = request.nextUrl.pathname.startsWith('/staff/login');

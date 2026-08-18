@@ -13,7 +13,13 @@ const supabaseAdminEdge = createClient(
 
 export async function verifyStaff() {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+    } catch (_) {
+        user = null;
+    }
     if (!user) return { success: false };
 
     const { data: staffMember } = await supabaseAdminEdge
@@ -82,7 +88,13 @@ export async function loginStaff(formData: FormData) {
         }
 
         // Permission-based routing — honour admin's role assignments, not hardcoded role names
-        const { data: { user } } = await supabase.auth.getUser();
+        let user = null;
+        try {
+            const { data } = await supabase.auth.getUser();
+            user = data?.user ?? null;
+        } catch (_) {
+            user = null;
+        }
         if (user) {
             const { data: staffMember } = await supabaseAdminEdge
                 .from('staff_users')
@@ -159,7 +171,13 @@ export async function loginStaff(formData: FormData) {
 
 export async function logoutStaff() {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+    } catch (_) {
+        user = null;
+    }
     if (user) {
         const { data: staffMember } = await supabaseAdminEdge
             .from('staff_users')

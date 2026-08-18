@@ -104,7 +104,7 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
                 status: 'pending'
             }));
 
-            const { error: itemsErr } = await supabase
+            const { error: itemsErr } = await supabaseAdmin
                 .from('order_items')
                 .insert(orderItemsPayload);
 
@@ -130,8 +130,8 @@ export async function submitCustomerOrder(customer: CustomerSession, cart: CartI
             
             await supabaseAdmin.from('orders').update({ updated_at: new Date().toISOString() }).eq('id', orderId);
         } else {
-            // Create brand new order using ANON client (relies on RLS)
-            const { data: order, error: orderErr } = await supabase
+            // Create brand new order using service role admin client
+            const { data: order, error: orderErr } = await supabaseAdmin
                 .from('orders')
                 .insert([{
                     table_id: tableId,

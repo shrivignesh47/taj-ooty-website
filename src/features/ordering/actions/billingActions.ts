@@ -8,7 +8,13 @@ import { revalidatePath } from 'next/cache';
 
 async function requireCashierIdentity() {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = null;
+    try {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+    } catch (_) {
+        user = null;
+    }
     if (!user) return { error: 'Unauthorized' as const };
 
     const { data: staff, error } = await supabaseAdmin
