@@ -6,11 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:tauri": "cross-env TAURI_BUILD=1 next build",
+    "tauri:dev": "cd windowsapplication_billing && npx tauri dev",
+    "tauri:build": "cd windowsapplication_billing && npx tauri build",
+    "tauri:build:debug": "cd windowsapplication_billing && npx tauri build --debug"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.109.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-store": "^2.4.4",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "date-fns": "^4.4.0",
     "framer-motion": "^12.42.2",
     "jszip": "^3.10.1",
@@ -32,6 +39,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
