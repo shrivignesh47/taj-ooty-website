@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:tauri": "cross-env TAURI_BUILD=1 next build",
+    "tauri:dev": "cd windowsapplication_billing && npx tauri dev",
+    "tauri:build": "cd windowsapplication_billing && npx tauri build",
+    "tauri:build:debug": "cd windowsapplication_billing && npx tauri build --debug"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

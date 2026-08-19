@@ -12,6 +12,13 @@ function verifySignature(payload: string, signature: string | null, secret: stri
     }
 }
 
+export function generateStaticParams() {
+    return [
+        { source: 'swiggy' },
+        { source: 'zomato' }
+    ];
+}
+
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ source: string }> }

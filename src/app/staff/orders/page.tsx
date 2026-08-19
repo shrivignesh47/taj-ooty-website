@@ -11,11 +11,10 @@ export default async function WaiterOrdersPage() {
         redirect('/staff/login');
     }
 
-    // Check permissions only — admin has all permissions via verifyStaff()
+    // Check permissions and exclude admin from waiter dashboard
     const hasAccess = auth.user.permissions.some(p => [
-        'view_orders', 'confirm_orders', 'edit_orders', 'manage_tables',
-        'view_kitchen_queue', 'update_prep_status', 'view_billing', 'generate_bills'
-    ].includes(p));
+        'view_orders', 'confirm_orders', 'edit_orders', 'manage_tables'
+    ].includes(p)) && auth.user.roleName.toLowerCase() !== 'admin';
     if (!hasAccess) {
         redirect('/staff/dashboard');
     }
