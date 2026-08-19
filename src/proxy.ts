@@ -11,9 +11,16 @@ export async function proxy(request: NextRequest) {
         },
     });
 
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
+    const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        return response;
+    }
+
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        supabaseUrl,
+        supabaseAnonKey,
         {
             cookies: {
                 get(name: string) {
@@ -48,18 +55,31 @@ export async function proxy(request: NextRequest) {
     const isStaffRoute = request.nextUrl.pathname.startsWith('/staff');
     const isLoginRoute = request.nextUrl.pathname.startsWith('/staff/login');
 
+    const hasStaffCookie = Boolean(
+        request.cookies.get('taj_staff_session')?.value ||
+        request.cookies.get('staff_user')?.value ||
+        request.cookies.get('staff_id')?.value
+    );
+
+    const isAuthenticated = Boolean(user || hasStaffCookie);
+
     // RBAC Gateway Block
     if (isStaffRoute) {
-        if (!user && !isLoginRoute) {
+        if (!isAuthenticated && !isLoginRoute) {
             // Redirect unauthenticated off the staff portal
-            return NextResponse.redirect(new URL('/staff/login', request.url));
+            const redirectUrl = new URL('/staff/login', request.url);
+            redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
+            return NextResponse.redirect(redirectUrl);
         }
 
-        if (user && isLoginRoute) {
-            // Already logged in — redirect to the most relevant page based on permissions
+        if (isAuthenticated && isLoginRoute) {
+            if (user) {
+                // Already logged in — redirect to the most relevant page based on permissions
+            const supabaseUrlClean = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
+            const supabaseServiceKeyClean = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
             const supabaseAdminEdge = createClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!
+                supabaseUrlClean,
+                supabaseServiceKeyClean
             );
             const { data: staffMember } = await supabaseAdminEdge
                 .from('staff_users')
@@ -109,14 +129,20 @@ export async function proxy(request: NextRequest) {
             }
 
             return NextResponse.redirect(new URL(dest, request.url));
+            } else {
+                // Fallback for staff cookie authentication: redirect to default staff orders
+                return NextResponse.redirect(new URL('/staff/orders', request.url));
+            }
         }
 
         if (user && !isLoginRoute) {
             // Fully Verify Staff Identity against DB
             try {
+                const supabaseUrlClean = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
+                const supabaseServiceKeyClean = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
                 const supabaseAdminEdge = createClient(
-                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                    process.env.SUPABASE_SERVICE_ROLE_KEY!
+                    supabaseUrlClean,
+                    supabaseServiceKeyClean
                 );
 
                 const { data: staffMember, error } = await supabaseAdminEdge
