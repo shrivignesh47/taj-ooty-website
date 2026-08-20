@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capabilities for Taj POS","local":true,"windows":["main"],"permissions":["core:default","shell:allow-open","store:default","updater:default","notification:default","sql:default","fs:default","dialog:default"]}}

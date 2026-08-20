@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.tajpos.billing",
   "build": {
-    "beforeDevCommand": "cd .. && npm run dev",
+    "beforeDevCommand": "cd .. && npm run dev -- --webpack",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "cd .. && npm run build:tauri",
+    "beforeBuildCommand": "cd .. && cross-env TAURI_BUILD=1 next build",
     "frontendDist": "../../out"
   },
   "app": {
@@ -51,9 +51,6 @@
       ],
       "dialog": true,
       "pubkey": ""
-    },
-    "store": {
-      "path": "tajpos.bin"
     }
   }
 }

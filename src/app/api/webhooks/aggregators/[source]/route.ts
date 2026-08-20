@@ -98,3 +98,11 @@ export async function POST(
         external_order_id: orderIdExt
     });
 }
+
+export function generateStaticParams() {
+    return [
+        { source: 'swiggy' },
+        { source: 'zomato' }
+    ];
+}
+

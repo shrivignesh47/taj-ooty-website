@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:tauri": "cross-env TAURI_BUILD=1 next build",
+    "build:tauri": "npx tsx scripts/build-tauri.ts",
     "tauri:dev": "cd windowsapplication_billing && npx tauri dev",
     "tauri:build": "cd windowsapplication_billing && npx tauri build",
     "tauri:build:debug": "cd windowsapplication_billing && npx tauri build --debug"
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.1.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
