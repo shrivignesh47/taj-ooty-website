@@ -5,6 +5,6 @@
 .DS_Store
 *.tsbuildinfo
 
-# Deleted: middleware.ts was replaced by proxy.ts (Next.js 16 requirement)
+
 src/middleware.ts
 windowsapplication_billing/
