@@ -1,177 +1,151 @@
- 
- 
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function proxy(request: NextRequest) {
-    let response = NextResponse.next({
-        request: {
-            headers: request.headers,
-        },
-    });
+// ─────────────────────────────────────────────────────────────────────────────
+// Role → allowed route prefixes
+// A role can access a route if ANY of its allowed prefixes matches the path.
+// ─────────────────────────────────────────────────────────────────────────────
+const ROLE_ROUTES: Record<string, string[]> = {
+  admin:   ['/staff/admin', '/staff/dashboard'],
+  cashier: ['/staff/billing', '/staff/dashboard'],
+  waiter:  ['/staff/orders', '/staff/dashboard'],
+  kitchen: ['/staff/kitchen', '/staff/dashboard'],
+};
 
-    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
-    const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
+// Routes that every authenticated staff member can access regardless of role
+const PUBLIC_STAFF_ROUTES = ['/staff/login'];
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-        return response;
-    }
+function roleAllowed(role: string, pathname: string): boolean {
+  const allowed = ROLE_ROUTES[role.toLowerCase()] ?? [];
+  return allowed.some((prefix) => pathname.startsWith(prefix));
+}
 
-    const supabase = createServerClient(
-        supabaseUrl,
-        supabaseAnonKey,
-        {
-            cookies: {
-                get(name: string) {
-                    return request.cookies.get(name)?.value;
-                },
-                set(name: string, value: string, options: CookieOptions) {
-                    request.cookies.set({ name, value, ...options });
-                    response = NextResponse.next({
-                        request: { headers: request.headers },
-                    });
-                    response.cookies.set({ name, value, ...options });
-                },
-                remove(name: string, options: CookieOptions) {
-                    request.cookies.set({ name, value: '', ...options });
-                    response = NextResponse.next({
-                        request: { headers: request.headers },
-                    });
-                    response.cookies.set({ name, value: '', ...options });
-                },
-            },
-        }
-    );
+function defaultRouteForRole(role: string): string {
+  switch (role.toLowerCase()) {
+    case 'admin':   return '/staff/admin';
+    case 'cashier': return '/staff/billing';
+    case 'kitchen': return '/staff/kitchen';
+    case 'waiter':  return '/staff/orders';
+    default:        return '/staff/orders';
+  }
+}
 
-    let user = null;
-    try {
-        const { data } = await supabase.auth.getUser();
-        user = data?.user ?? null;
-    } catch (_) {
-        user = null;
-    }
+export default async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-    const isStaffRoute = request.nextUrl.pathname.startsWith('/staff');
-    const isLoginRoute = request.nextUrl.pathname.startsWith('/staff/login');
+  let response = NextResponse.next({
+    request: { headers: request.headers },
+  });
 
-    const hasStaffCookie = Boolean(
-        request.cookies.get('taj_staff_session')?.value ||
-        request.cookies.get('staff_user')?.value ||
-        request.cookies.get('staff_id')?.value
-    );
+  // Strip any accidental surrounding quotes from env vars (Windows .env.local quirk)
+  const supabaseUrl  = (process.env.NEXT_PUBLIC_SUPABASE_URL  ?? '').replace(/^"|"$/g, '').trim();
+  const supabaseAnon = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').replace(/^"|"$/g, '').trim();
+  const serviceRole  = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^"|"$/g, '').trim();
 
-    const isAuthenticated = Boolean(user || hasStaffCookie);
-
-    // RBAC Gateway Block
-    if (isStaffRoute) {
-        if (!isAuthenticated && !isLoginRoute) {
-            // Redirect unauthenticated off the staff portal
-            const redirectUrl = new URL('/staff/login', request.url);
-            redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
-            return NextResponse.redirect(redirectUrl);
-        }
-
-        if (isAuthenticated && isLoginRoute) {
-            if (user) {
-                // Already logged in — redirect to the most relevant page based on permissions
-            const supabaseUrlClean = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
-            const supabaseServiceKeyClean = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
-            const supabaseAdminEdge = createClient(
-                supabaseUrlClean,
-                supabaseServiceKeyClean
-            );
-            const { data: staffMember } = await supabaseAdminEdge
-                .from('staff_users')
-                .select(`
-                    roles (
-                        name,
-                        role_permissions (
-                            permissions ( key )
-                        )
-                    )
-                `)
-                .eq('auth_id', user.id)
-                .single();
-
-            const roleData: any = (staffMember as any)?.roles;
-            const roleName = roleData?.name?.toLowerCase() ?? '';
-            const permSet = new Set<string>();
-
-            if (roleName === 'admin') {
-                // Short-circuit: admin always goes to admin
-                return NextResponse.redirect(new URL('/staff/admin', request.url));
-            }
-
-            if (roleData?.role_permissions) {
-                roleData.role_permissions.forEach((rp: any) => {
-                    if (rp.permissions?.key) permSet.add(rp.permissions.key);
-                });
-            }
-
-            let dest = '/staff/billing'; // Changed default to billing/orders rather than station hub
-            if (roleName === 'admin') {
-                dest = '/staff/admin';
-            } else if (roleName === 'cashier') {
-                dest = '/staff/billing';
-            } else if (roleName === 'waiter') {
-                dest = '/staff/orders';
-            } else if (roleName === 'kitchen') {
-                dest = '/staff/kitchen';
-            } else if (permSet.has('manage_staff') || permSet.has('view_revenue') || permSet.has('manage_roles')) {
-                dest = '/staff/admin';
-            } else if (permSet.has('view_kitchen_queue') || permSet.has('update_prep_status')) {
-                dest = '/staff/kitchen';
-            } else if (permSet.has('view_billing') || permSet.has('generate_bills')) {
-                dest = '/staff/billing';
-            } else if (permSet.has('view_orders') || permSet.has('confirm_orders') || permSet.has('edit_orders')) {
-                dest = '/staff/orders';
-            }
-
-            return NextResponse.redirect(new URL(dest, request.url));
-            } else {
-                // Fallback for staff cookie authentication: redirect to default staff orders
-                return NextResponse.redirect(new URL('/staff/orders', request.url));
-            }
-        }
-
-        if (user && !isLoginRoute) {
-            // Fully Verify Staff Identity against DB
-            try {
-                const supabaseUrlClean = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
-                const supabaseServiceKeyClean = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
-                const supabaseAdminEdge = createClient(
-                    supabaseUrlClean,
-                    supabaseServiceKeyClean
-                );
-
-                const { data: staffMember, error } = await supabaseAdminEdge
-                    .from('staff_users')
-                    .select('is_active, roles(name)')
-                    .eq('auth_id', user.id)
-                    .single();
-
-                if (!error && staffMember && !staffMember.is_active) {
-                    await supabase.auth.signOut();
-                    return NextResponse.redirect(new URL('/staff/login?error=UnauthorizedAccess', request.url));
-                }
-            } catch {
-                // Network error reaching DB from Edge — allow through, page-level auth will check
-            }
-        }
-    }
-
+  if (!supabaseUrl || !supabaseAnon) {
+    // Can't run auth without credentials — let through and let page handle it
     return response;
+  }
+
+  // ── Only run auth/RBAC logic on staff routes ─────────────────────────────
+  const isStaffRoute = pathname.startsWith('/staff');
+  if (!isStaffRoute) return response;
+
+  const isLoginRoute = pathname === '/staff/login' || pathname.startsWith('/staff/login/');
+
+  // Build Supabase SSR client (reads session from cookies)
+  const supabase = createServerClient(supabaseUrl, supabaseAnon, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        request.cookies.set({ name, value, ...options });
+        response = NextResponse.next({ request: { headers: request.headers } });
+        response.cookies.set({ name, value, ...options });
+      },
+      remove(name: string, options: CookieOptions) {
+        request.cookies.set({ name, value: '', ...options });
+        response = NextResponse.next({ request: { headers: request.headers } });
+        response.cookies.set({ name, value: '', ...options });
+      },
+    },
+  });
+
+  // ── 1. Check Supabase session ─────────────────────────────────────────────
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {
+    user = null;
+  }
+
+  // ── 2. Unauthenticated → redirect to login ────────────────────────────────
+  if (!user) {
+    if (isLoginRoute) return response; // already on login page — fine
+    const loginUrl = new URL('/staff/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // ── 3. Authenticated — fetch role from DB ─────────────────────────────────
+  let roleName = '';
+  let isActive = true;
+
+  if (serviceRole) {
+    try {
+      const admin = createClient(supabaseUrl, serviceRole);
+      const { data: staffMember } = await admin
+        .from('staff_users')
+        .select('is_active, roles(name)')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (staffMember) {
+        isActive = staffMember.is_active ?? true;
+        const roleData: unknown = staffMember.roles;
+        if (roleData && typeof roleData === 'object' && 'name' in roleData) {
+          roleName = String((roleData as { name: string }).name).toLowerCase();
+        }
+      }
+    } catch {
+      // DB unreachable from edge — fail open, let page-level auth handle it
+    }
+  }
+
+  // ── 4. Deactivated account → force sign out ───────────────────────────────
+  if (!isActive) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(new URL('/staff/login?error=AccountDisabled', request.url));
+  }
+
+  // ── 5. Authenticated + on login page → redirect to their dashboard ────────
+  if (isLoginRoute) {
+    return NextResponse.redirect(new URL(defaultRouteForRole(roleName), request.url));
+  }
+
+  // ── 6. Authenticated but wrong role for this route → redirect to their dashboard ──
+  if (roleName && !roleAllowed(roleName, pathname)) {
+    const dest = defaultRouteForRole(roleName);
+    // Avoid redirect loop: if their default is also not allowed somehow, let through
+    if (dest !== pathname) {
+      return NextResponse.redirect(new URL(`${dest}?error=Unauthorized`, request.url));
+    }
+  }
+
+  return response;
 }
 
 export const config = {
-    matcher: [
-        /*
-         * Match all request paths except for the ones starting with:
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         */
-        '/((?!_next/static|_next/image|favicon.ico).*)',
-    ],
+  matcher: [
+    /*
+     * Match all paths EXCEPT:
+     * - _next/static (static assets)
+     * - _next/image  (image optimisation)
+     * - favicon.ico
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
 };

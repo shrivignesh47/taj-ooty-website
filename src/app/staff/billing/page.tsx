@@ -11,14 +11,13 @@ export default async function BillingPage() {
         redirect('/staff/login');
     }
 
-    // Check permissions only — admin/staff has access if they have billing or general staff/admin permissions
+    // Check permissions and exclude admin from billing dashboard
     const hasAccess = auth.user.permissions.some(p => [
-        'view_billing', 'generate_bills', 'view_orders', 'confirm_orders', 
-        'view_revenue', 'manage_staff', 'manage_roles'
-    ].includes(p));
+        'view_billing', 'generate_bills', 'view_revenue'
+    ].includes(p)) && auth.user.roleName.toLowerCase() !== 'admin';
     
     if (!hasAccess) {
-        redirect('/staff/login?error=UnauthorizedAccess');
+        redirect('/staff/dashboard');
     }
 
     return (

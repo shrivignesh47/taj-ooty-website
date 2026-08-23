@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:tauri": "npx tsx scripts/build-tauri.ts",
+    "build:tauri": "cross-env TAURI_BUILD=1 next build",
     "tauri:dev": "cd windowsapplication_billing && npx tauri dev",
     "tauri:build": "cd windowsapplication_billing && npx tauri build",
     "tauri:build:debug": "cd windowsapplication_billing && npx tauri build --debug"
