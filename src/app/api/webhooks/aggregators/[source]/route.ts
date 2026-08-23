@@ -106,10 +106,3 @@ export async function POST(
     });
 }
 
-export function generateStaticParams() {
-    return [
-        { source: 'swiggy' },
-        { source: 'zomato' }
-    ];
-}
-
