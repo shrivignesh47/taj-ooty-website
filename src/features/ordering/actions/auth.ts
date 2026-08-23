@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createSupabaseServerClient } from '../lib/supabaseServer';
+import { createSupabaseServerClient, persistSession } from '../lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -78,13 +78,17 @@ export async function loginStaff(formData: FormData) {
         }
 
         const supabase = await createSupabaseServerClient();
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
 
         if (error) {
             return { error: error.message };
+        }
+
+        if (signInData.session) {
+            await persistSession(signInData.session as unknown as Record<string, unknown>);
         }
 
         // Permission-based routing — honour admin's role assignments, not hardcoded role names
