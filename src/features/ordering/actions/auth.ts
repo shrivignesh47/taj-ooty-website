@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createSupabaseServerClient } from '../lib/supabaseServer';
+import { createSupabaseServerClient, persistSession } from '../lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
@@ -88,9 +88,12 @@ export async function loginStaff(formData: FormData) {
             return { error: error.message };
         }
 
-        // The getAll/setAll cookie pattern in createSupabaseServerClient
-        // lets the @supabase/ssr library persist the session automatically
-        // via its onAuthStateChange → applyServerStorage flow.
+        // Synchronously write auth cookies — the library's onAuthStateChange
+        // → applyServerStorage flow is fire-and-forget and completes AFTER the
+        // Server Action response is sent, so the browser never receives the cookies.
+        if (signInData.session) {
+            await persistSession(signInData.session as unknown as Record<string, unknown>);
+        }
 
         // Permission-based routing — honour admin's role assignments, not hardcoded role names
         let user = null;
