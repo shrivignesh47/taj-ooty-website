@@ -2,8 +2,9 @@
 
 "use server";
 
-import { createSupabaseServerClient, persistSession } from '../lib/supabaseServer';
+import { createSupabaseServerClient } from '../lib/supabaseServer';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdminEdge = createClient(
@@ -87,9 +88,9 @@ export async function loginStaff(formData: FormData) {
             return { error: error.message };
         }
 
-        if (signInData.session) {
-            await persistSession(signInData.session as unknown as Record<string, unknown>);
-        }
+        // The getAll/setAll cookie pattern in createSupabaseServerClient
+        // lets the @supabase/ssr library persist the session automatically
+        // via its onAuthStateChange → applyServerStorage flow.
 
         // Permission-based routing — honour admin's role assignments, not hardcoded role names
         let user = null;
@@ -197,5 +198,15 @@ export async function logoutStaff() {
         }
     }
     await supabase.auth.signOut();
+
+    // Manually clear auth cookies — signOut's onAuthStateChange is async and
+    // won't complete before redirect() sends the response.
+    const cookieStore = await cookies();
+    for (const { name } of cookieStore.getAll()) {
+        if (name.startsWith('sb-')) {
+            cookieStore.set(name, '', { maxAge: 0, path: '/' });
+        }
+    }
+
     redirect('/staff/login');
 }

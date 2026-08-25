@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { acceptAndConfirmOrder, cancelOrder, markOrderServed, sendTableToCashier, addItemsToOrder, updateOrderItemQty, deleteOrderItem, fetchWaiterDashboardData } from '@/features/ordering/actions/waiterActions';
 import { updateStaffSelf, resetStaffPassword } from '@/features/ordering/actions/staffActions';
-import { logoutStaff, verifyStaff } from '@/features/ordering/actions/auth';
+import { logoutStaff } from '@/features/ordering/actions/auth';
 import { MenuCatalog, getLiveCatalog } from '@/features/ordering/api/getCatalog';
 import { toast } from '@/features/ordering/lib/toast';
 import { Toaster } from '@/components/Toaster';
@@ -192,30 +192,8 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
     const activeOrders = useMemo(() => ordersList.filter(o => ['confirmed', 'preparing', 'ready', 'kitchen'].includes(o.status?.toLowerCase())), [ordersList]);
     const myActiveOrders = useMemo(() => activeOrders.filter(o => o.waiter_id === activeUser.id), [activeOrders, activeUser.id]);
 
-    // Realtime channel subscriptions & 3-second background polling
+    // Realtime channel subscriptions & 10-second background polling
     useEffect(() => {
-        const updatePermissions = async () => {
-            const res = await verifyStaff();
-            if (res.success && res.user) {
-                const newPerms = res.user.permissions || [];
-                setUserPermissions(newPerms);
-
-                // permissions array already has all perms for admin via verifyStaff()
-                setTab(currentTab => {
-                    if (currentTab === 'kitchen' && !newPerms.includes('view_kitchen_queue')) {
-                        const hasConfirm = newPerms.includes('confirm_orders');
-                        const hasView = newPerms.includes('view_orders');
-                        return hasConfirm ? 'incoming' : (hasView ? 'tables' : 'settings');
-                    }
-                    if (currentTab === 'incoming' && !newPerms.includes('confirm_orders')) {
-                        const hasView = newPerms.includes('view_orders');
-                        return hasView ? 'tables' : 'settings';
-                    }
-                    return currentTab;
-                });
-            }
-        };
-
         // 10-second background fallback interval alongside instant WebSockets
         const interval = setInterval(() => {
             fetchData();
@@ -223,7 +201,7 @@ export function WaiterDash({ activeUser, catalog }: { activeUser: any, catalog?:
 
         // Realtime WebSockets channels
         const channelPending = supabase.channel('waiter-pending')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchData(); updatePermissions(); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchData(); })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => { fetchData(); })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_status_history' }, () => { fetchData(); });
 
