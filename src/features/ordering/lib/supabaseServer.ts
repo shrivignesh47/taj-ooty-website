@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+const STORAGE_KEY = 'supabase.auth.token';
+
 const BASE64_PREFIX = 'base64-';
 const MAX_CHUNK_SIZE = 3180;
 
@@ -82,6 +84,9 @@ export async function createSupabaseServerClient() {
                     }
                 },
             },
+            cookieOptions: {
+                name: STORAGE_KEY,
+            },
         }
     );
 }
@@ -94,14 +99,11 @@ export async function createSupabaseServerClient() {
  */
 export async function persistSession(session: Record<string, unknown>) {
     const cookieStore = await cookies();
-    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
-    const projectRef = supabaseUrl.match(/\/\/([^.]+)\./)?.[1] || '';
-    const storageKey = `sb-${projectRef}-auth-token`;
 
     const sessionStr = JSON.stringify(session);
     const encoded = `${BASE64_PREFIX}${stringToBase64URL(sessionStr)}`;
 
-    const chunks = createChunks(storageKey, encoded);
+    const chunks = createChunks(STORAGE_KEY, encoded);
     for (const chunk of chunks) {
         cookieStore.set(chunk.name, chunk.value, {
             path: '/',
