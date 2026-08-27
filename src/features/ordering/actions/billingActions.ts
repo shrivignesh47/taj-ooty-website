@@ -1,26 +1,19 @@
 "use server";
 
-import { createSupabaseServerClient } from '../lib/supabaseServer';
+import { getAuthUserId } from '../lib/supabaseServer';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
 async function requireCashierIdentity() {
-    const supabase = await createSupabaseServerClient();
-    let user = null;
-    try {
-        const { data } = await supabase.auth.getUser();
-        user = data?.user ?? null;
-    } catch (_) {
-        user = null;
-    }
-    if (!user) return { error: 'Unauthorized' as const };
+    const userId = await getAuthUserId();
+    if (!userId) return { error: 'Unauthorized' as const };
 
     const { data: staff, error } = await supabaseAdmin
         .from('staff_users')
         .select('id, role_id')
-        .eq('auth_id', user.id)
+        .eq('auth_id', userId)
         .single();
 
     if (error || !staff) return { error: 'Staff profile not found' as const };

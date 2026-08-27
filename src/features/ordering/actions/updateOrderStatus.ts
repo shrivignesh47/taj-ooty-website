@@ -1,20 +1,18 @@
 "use server";
 
-import { createSupabaseServerClient } from '../lib/supabaseServer';
+import { getAuthUserId } from '../lib/supabaseServer';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
 
 async function requireStaffIdentity() {
     try {
-        const supabase = await createSupabaseServerClient();
-        const { data } = await supabase.auth.getUser();
-        const user = data?.user ?? null;
+        const userId = await getAuthUserId();
 
-        if (user) {
+        if (userId) {
             const { data: staff } = await supabaseAdmin
                 .from('staff_users')
                 .select('id, role_id')
-                .eq('auth_id', user.id)
+                .eq('auth_id', userId)
                 .single();
 
             if (staff) return { staff };

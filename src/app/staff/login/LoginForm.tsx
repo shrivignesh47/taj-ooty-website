@@ -24,7 +24,10 @@ export function LoginForm() {
             if (res?.error) {
                 setLocalError(res.error);
                 setIsLoading(false);
-            } else if (res?.success && res.redirectUrl) {
+            } else if (res?.success && res.redirectUrl && res.accessToken) {
+                // Set the auth cookie via document.cookie — guaranteed to reach
+                // the browser, unlike Server Action cookies() which may be lost.
+                document.cookie = `taj_token=${res.accessToken}; path=/; SameSite=Lax; max-age=${12 * 60 * 60}`;
                 window.location.href = res.redirectUrl;
             } else {
                 setLocalError("Unexpected response from server.");
@@ -63,6 +66,7 @@ export function LoginForm() {
                     required
                     type="password"
                     className="w-full bg-white border border-[#C9974A]/30 rounded-lg px-4 py-3 text-[#241B15] focus:outline-none focus:ring-2 focus:ring-[#C9974A]/50 transition-all font-medium"
+                    placeholder="Enter your password"
                 />
             </div>
 

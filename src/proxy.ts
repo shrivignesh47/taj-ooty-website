@@ -1,8 +1,6 @@
-import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
-
-const STORAGE_KEY = 'supabase.auth.token';
+import { COOKIE_NAME, decodeJwtPayload } from './features/ordering/lib/supabaseServer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Role → allowed route prefixes
@@ -33,23 +31,6 @@ function defaultRouteForRole(role: string): string {
   }
 }
 
-/**
- * Create a redirect response that carries any Set-Cookie headers accumulated
- * on `currentResponse` (e.g. from supabase.auth.getUser() session refresh).
- * Without this, `NextResponse.redirect()` creates a blank response and the
- * refreshed session cookies are silently dropped.
- */
-function redirectWithCookies(
-  url: URL,
-  currentResponse: NextResponse,
-): NextResponse {
-  const res = NextResponse.redirect(url);
-  for (const c of currentResponse.cookies.getAll()) {
-    res.cookies.set(c.name, c.value, c);
-  }
-  return res;
-}
-
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -63,7 +44,6 @@ export default async function proxy(request: NextRequest) {
   const serviceRole  = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^"|"$/g, '').trim();
 
   if (!supabaseUrl || !supabaseAnon) {
-    // Can't run auth without credentials — let through and let page handle it
     return response;
   }
 
@@ -73,37 +53,26 @@ export default async function proxy(request: NextRequest) {
 
   const isLoginRoute = pathname === '/staff/login' || pathname.startsWith('/staff/login/');
 
-  // Build Supabase SSR client (reads session from cookies)
-  const supabase = createServerClient(supabaseUrl, supabaseAnon, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll().map(({ name, value }) => ({ name, value }));
-      },
-      setAll(cookiesToSet) {
-        for (const { name, value, options } of cookiesToSet) {
-          request.cookies.set({ name, value, ...options });
-          response.cookies.set({ name, value, ...options });
-        }
-      },
-    },
-    cookieOptions: { name: STORAGE_KEY },
-  });
+  // ── 1. Read auth token from cookie ────────────────────────────────────────
+  const token = request.cookies.get(COOKIE_NAME)?.value ?? '';
 
-  // ── 1. Check Supabase session ─────────────────────────────────────────────
-  let user = null;
-  try {
-    const { data } = await supabase.auth.getUser();
-    user = data?.user ?? null;
-  } catch {
-    user = null;
+  let userId: string | null = null;
+  if (token) {
+    const payload = decodeJwtPayload(token);
+    if (payload && typeof payload.sub === 'string') {
+      const exp = typeof payload.exp === 'number' ? payload.exp * 1000 : Infinity;
+      if (exp > Date.now()) {
+        userId = payload.sub;
+      }
+    }
   }
 
   // ── 2. Unauthenticated → redirect to login ────────────────────────────────
-  if (!user) {
-    if (isLoginRoute) return response; // already on login page — fine
+  if (!userId) {
+    if (isLoginRoute) return response;
     const loginUrl = new URL('/staff/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return redirectWithCookies(loginUrl, response);
+    return NextResponse.redirect(loginUrl);
   }
 
   // ── 3. Authenticated — fetch role from DB ─────────────────────────────────
@@ -116,7 +85,7 @@ export default async function proxy(request: NextRequest) {
       const { data: staffMember } = await admin
         .from('staff_users')
         .select('is_active, roles(name)')
-        .eq('auth_id', user.id)
+        .eq('auth_id', userId)
         .single();
 
       if (staffMember) {
@@ -127,27 +96,27 @@ export default async function proxy(request: NextRequest) {
         }
       }
     } catch {
-      // DB unreachable from edge — fail open, let page-level auth handle it
+      // DB unreachable — fail open, let page-level auth handle it
     }
   }
 
-  // ── 4. Deactivated account → force sign out ───────────────────────────────
+  // ── 4. Deactivated account → clear cookie and redirect ────────────────────
   if (!isActive) {
-    await supabase.auth.signOut();
-    return redirectWithCookies(new URL('/staff/login?error=AccountDisabled', request.url), response);
+    const res = NextResponse.redirect(new URL('/staff/login?error=AccountDisabled', request.url));
+    res.cookies.set(COOKIE_NAME, '', { maxAge: 0, path: '/' });
+    return res;
   }
 
   // ── 5. Authenticated + on login page → redirect to their dashboard ────────
   if (isLoginRoute) {
-    return redirectWithCookies(new URL(defaultRouteForRole(roleName), request.url), response);
+    return NextResponse.redirect(new URL(defaultRouteForRole(roleName), request.url));
   }
 
   // ── 6. Authenticated but wrong role for this route → redirect to their dashboard ──
   if (roleName && !roleAllowed(roleName, pathname)) {
     const dest = defaultRouteForRole(roleName);
-    // Avoid redirect loop: if their default is also not allowed somehow, let through
     if (dest !== pathname) {
-      return redirectWithCookies(new URL(`${dest}?error=Unauthorized`, request.url), response);
+      return NextResponse.redirect(new URL(`${dest}?error=Unauthorized`, request.url));
     }
   }
 
