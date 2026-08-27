@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 
+const STORAGE_KEY = 'supabase.auth.token';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Role → allowed route prefixes
 // A role can access a route if ANY of its allowed prefixes matches the path.
@@ -29,6 +31,23 @@ function defaultRouteForRole(role: string): string {
     case 'waiter':  return '/staff/orders';
     default:        return '/staff/orders';
   }
+}
+
+/**
+ * Create a redirect response that carries any Set-Cookie headers accumulated
+ * on `currentResponse` (e.g. from supabase.auth.getUser() session refresh).
+ * Without this, `NextResponse.redirect()` creates a blank response and the
+ * refreshed session cookies are silently dropped.
+ */
+function redirectWithCookies(
+  url: URL,
+  currentResponse: NextResponse,
+): NextResponse {
+  const res = NextResponse.redirect(url);
+  for (const c of currentResponse.cookies.getAll()) {
+    res.cookies.set(c.name, c.value, c);
+  }
+  return res;
 }
 
 export default async function proxy(request: NextRequest) {
@@ -67,6 +86,7 @@ export default async function proxy(request: NextRequest) {
         }
       },
     },
+    cookieOptions: { name: STORAGE_KEY },
   });
 
   // ── 1. Check Supabase session ─────────────────────────────────────────────
@@ -83,7 +103,7 @@ export default async function proxy(request: NextRequest) {
     if (isLoginRoute) return response; // already on login page — fine
     const loginUrl = new URL('/staff/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirectWithCookies(loginUrl, response);
   }
 
   // ── 3. Authenticated — fetch role from DB ─────────────────────────────────
@@ -114,12 +134,12 @@ export default async function proxy(request: NextRequest) {
   // ── 4. Deactivated account → force sign out ───────────────────────────────
   if (!isActive) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(new URL('/staff/login?error=AccountDisabled', request.url));
+    return redirectWithCookies(new URL('/staff/login?error=AccountDisabled', request.url), response);
   }
 
   // ── 5. Authenticated + on login page → redirect to their dashboard ────────
   if (isLoginRoute) {
-    return NextResponse.redirect(new URL(defaultRouteForRole(roleName), request.url));
+    return redirectWithCookies(new URL(defaultRouteForRole(roleName), request.url), response);
   }
 
   // ── 6. Authenticated but wrong role for this route → redirect to their dashboard ──
@@ -127,7 +147,7 @@ export default async function proxy(request: NextRequest) {
     const dest = defaultRouteForRole(roleName);
     // Avoid redirect loop: if their default is also not allowed somehow, let through
     if (dest !== pathname) {
-      return NextResponse.redirect(new URL(`${dest}?error=Unauthorized`, request.url));
+      return redirectWithCookies(new URL(`${dest}?error=Unauthorized`, request.url), response);
     }
   }
 

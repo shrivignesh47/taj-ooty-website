@@ -205,8 +205,9 @@ export async function logoutStaff() {
     // Manually clear auth cookies — signOut's onAuthStateChange is async and
     // won't complete before redirect() sends the response.
     const cookieStore = await cookies();
+    const storageKey = 'supabase.auth.token';
     for (const { name } of cookieStore.getAll()) {
-        if (name.startsWith('sb-')) {
+        if (name === storageKey || name.startsWith(storageKey + '.') || name.startsWith('sb-')) {
             cookieStore.set(name, '', { maxAge: 0, path: '/' });
         }
     }
