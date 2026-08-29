@@ -34,8 +34,13 @@ function defaultRouteForRole(role: string): string {
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Clone the original request headers. Never trust identity values sent by the
+  // client — strip them here and set sanitized ones after JWT validation below.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-taj-user-id');
+
   let response = NextResponse.next({
-    request: { headers: request.headers },
+    request: { headers: requestHeaders },
   });
 
   // Strip any accidental surrounding quotes from env vars (Windows .env.local quirk)
@@ -106,6 +111,12 @@ export default async function proxy(request: NextRequest) {
     res.cookies.set(COOKIE_NAME, '', { maxAge: 0, path: '/' });
     return res;
   }
+
+  // ── 4b. Authenticated + authorized → forward validated identity to the page ──
+  // Server Components read this header instead of relying on cookies, which
+  // guarantees they see the same identity the proxy validated.
+  requestHeaders.set('x-taj-user-id', userId);
+  response = NextResponse.next({ request: { headers: requestHeaders } });
 
   // ── 5. Authenticated + on login page → redirect to their dashboard ────────
   if (isLoginRoute) {

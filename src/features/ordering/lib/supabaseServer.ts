@@ -1,8 +1,17 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 export const COOKIE_NAME = 'taj_token';
 export const COOKIE_MAX_AGE = 12 * 60 * 60; // 12 hours
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Request header set by the proxy after JWT validation. Server Components read
+ * this instead of the raw cookie so identity is never lost between the proxy
+ * and the page function.
+ */
+export const USER_ID_HEADER = 'x-taj-user-id';
 
 export function supabaseUrl() {
     return (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
@@ -29,16 +38,21 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
 }
 
 /**
- * Read the `taj_token` cookie and return the auth user ID (JWT `sub` claim),
- * or null if the cookie is missing / invalid / expired.
+ * Read the authenticated user ID. Prefers the proxy-validated request header —
+ * which is guaranteed present after proxy JWT validation — and falls back to
+ * decoding the `taj_token` cookie for direct (non-proxy) requests.
  */
 export async function getAuthUserId(): Promise<string | null> {
+    const headerStore = await headers();
+    const forwardedId = headerStore.get(USER_ID_HEADER);
+    if (forwardedId && UUID_RE.test(forwardedId)) return forwardedId;
+
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
     if (!token) return null;
 
     const payload = decodeJwtPayload(token);
-    if (!payload || typeof payload.sub !== 'string') return null;
+    if (!payload || typeof payload.sub !== 'string' || !UUID_RE.test(payload.sub)) return null;
 
     if (typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) return null;
 
