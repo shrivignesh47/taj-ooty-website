@@ -85,6 +85,15 @@ export async function loginStaff(formData: FormData) {
             return { error: 'No session returned' };
         }
 
+        // Set the auth cookie via Set-Cookie header (server-side) so it is
+        // immediately available to middleware AND Server Components.
+        const cookieStore = await cookies();
+        cookieStore.set(COOKIE_NAME, accessToken, {
+            path: '/',
+            sameSite: 'lax',
+            maxAge: 12 * 60 * 60, // 12 hours
+        });
+
         // Decode JWT to get user ID for role lookup
         const payload = JSON.parse(atob(accessToken.split('.')[1]));
         const userId: string = payload.sub;
