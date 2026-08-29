@@ -218,54 +218,73 @@ export function AdminDash() {
     const handleFileUpload = (e: any) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
-        // Reset the input value so the same file triggers onChange again
         e.target.value = null;
 
         const reader = new FileReader();
         reader.onload = async (evt) => {
-            const wb = XLSX.read(evt.target?.result, { type: 'binary' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(ws);
+            try {
+                const buffer = evt.target?.result as ArrayBuffer;
+                const wb = XLSX.read(buffer, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                if (!ws) {
+                    alert('Excel appears empty — no sheets found.');
+                    return;
+                }
+                const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+                if (!data || data.length === 0) {
+                    alert('Excel appears empty — no rows detected. Ensure first row has headers: Category, Name, Price.');
+                    return;
+                }
 
-            // Build bulk array payload dynamically matching different header styles
-            const payload = data.map((d: any) => {
-                const norm = Object.keys(d).reduce((acc, key) => {
-                    acc[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = d[key];
-                    return acc;
-                }, {} as any);
+                const payload = (data as any[]).map((d: any) => {
+                    const norm = Object.keys(d).reduce((acc, key) => {
+                        const k = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        acc[k] = d[key];
+                        return acc;
+                    }, {} as any);
+                    const rawPrice = norm.price ?? norm.cost ?? norm.rate ?? norm.amount ?? '0';
+                    const cleanPrice = typeof rawPrice === 'string' ? rawPrice.replace(/[^0-9.\-]/g, '') : rawPrice;
+                    const priceNum = parseFloat(cleanPrice as string);
+                    return {
+                        name: (norm.name || norm.itemname || norm.title || norm.item || norm.dish || norm.product || '').toString().trim() || 'Imported Item',
+                        price: Number.isFinite(priceNum) ? priceNum : 0,
+                        category: (norm.category || norm.type || norm.group || norm.section || 'General').toString().trim() || 'General'
+                    };
+                }).filter(p => p.name && p.name.toLowerCase() !== 'imported item' || p.price > 0);
 
-                const rawPrice = norm.price || norm.cost || norm.rate || '0';
-                const cleanPrice = typeof rawPrice === 'string' ? rawPrice.replace(/[^0-9.]/g, '') : rawPrice;
+                if (payload.length === 0) {
+                    alert('No valid rows parsed. Check headers: at least Name and Price columns required.');
+                    return;
+                }
 
-                return {
-                    name: norm.name || norm.itemname || norm.title || norm.item || 'Imported Item',
-                    price: parseFloat(cleanPrice) || 0,
-                    category: norm.category || norm.type || norm.group || 'General'
-                };
-            });
+                // Show parsing summary in console for debugging
+                console.log(`Parsed ${payload.length} rows from Excel`, payload.slice(0, 3));
 
-            // Force visual sync before server request finishes
-            setMenu(prev => [
-                ...payload.map((p, i) => ({ id: `mock-${i}`, name: p.name, price: p.price, categories: { name: p.category } })),
-                ...prev
-            ]);
+                const { bulkAddMenuItems } = await import('@/features/ordering/actions/adminActions');
+                const res = await bulkAddMenuItems(payload);
 
-            const { bulkAddMenuItems } = await import('@/features/ordering/actions/adminActions');
-            const res = await bulkAddMenuItems(payload);
+                if (!res.success) {
+                    alert(`Upload failed: ${res.error}\n\nTip: headers should be Category, Name, Price (case-insensitive). Prices must be numbers.`);
+                    fetchData();
+                    return;
+                }
 
-            if (!res.success) {
-                alert(`Upload failed: ${res.error}\n\nPlease check your excel formatting (prices must be numbers)`);
-                // Revert optimistic UI
+                if (res.count === 0) {
+                    alert(res.message || 'No new items inserted — all rows already exist.');
+                    fetchData();
+                    return;
+                }
+
                 fetchData();
-                return;
+                alert(`Upload Complete! ${res.count} items added${(res as any).skippedDuplicates ? `, ${(res as any).skippedDuplicates} duplicates skipped` : ''}.`);
+            } catch (err: unknown) {
+                console.error('Excel parse error', err);
+                alert(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+                fetchData();
             }
-
-            // Re-fetch genuine ids from DB
-            fetchData();
-            alert('Upload Complete!');
         };
-        reader.readAsBinaryString(file);
+        reader.onerror = () => alert('Failed to read file. Try re-saving as .xlsx and retry.');
+        reader.readAsArrayBuffer(file);
     };
 
     const hasPerm = useCallback((requiredPerm: string) => {

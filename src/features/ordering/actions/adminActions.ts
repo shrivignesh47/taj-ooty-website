@@ -192,61 +192,98 @@ export async function addMenuItem(name: string, price: number, category: string)
 }
 
 export async function bulkAddMenuItems(items: { name: string, price: number, category: string }[]) {
-    // 1. Fetch existing categories
-    const { data: existingCats } = await admin.from('categories').select('id, name');
-    const catMap = new Map((existingCats || []).map(c => [c.name.toLowerCase(), c.id]));
+    if (!items || items.length === 0) {
+        return { success: false, error: 'Excel appears empty — no rows detected. Check headers (Category, Name, Price).' };
+    }
 
-    // 2. Identify missing categories
-    const uniqueIncomingCats = [...new Set(items.map(i => i.category))];
-    const missingCats = uniqueIncomingCats.filter(c => !catMap.has(c.toLowerCase()));
+    // Normalize incoming: trim, drop empty names, clamp price
+    const normalized = items
+        .map(i => ({
+            name: (i.name || '').toString().trim(),
+            category: (i.category || 'General').toString().trim() || 'General',
+            price: Number(i.price) || 0,
+        }))
+        .filter(i => i.name.length > 0 && i.name.toLowerCase() !== 'imported item');
+
+    if (normalized.length === 0) {
+        return { success: false, error: 'No valid rows found after parsing. Ensure Name column is filled.' };
+    }
+
+    // 1. Fetch existing categories (case-insensitive map)
+    const { data: existingCats, error: catFetchErr } = await admin.from('categories').select('id, name');
+    if (catFetchErr) return { success: false, error: `Failed to fetch categories: ${catFetchErr.message}` };
+    const catMap = new Map((existingCats || []).map(c => [c.name.toLowerCase().trim(), c.id]));
+    const catNameMap = new Map((existingCats || []).map(c => [c.name.toLowerCase().trim(), c.name])); // preserve original casing
+
+    // 2. Identify missing categories (trim + lower)
+    const uniqueIncomingCats = [...new Set(normalized.map(i => i.category.trim()))];
+    const missingCats = uniqueIncomingCats.filter(c => !catMap.has(c.toLowerCase().trim()));
+    // Keep original casing for insertion, but avoid duplicates like "general" vs "General"
+    const missingDisplayNames = missingCats.map(c => c.trim()).filter((c, idx, arr) => arr.findIndex(x => x.toLowerCase() === c.toLowerCase()) === idx);
 
     // 3. Create missing categories
-    if (missingCats.length > 0) {
-        const { data: maxSort } = await admin.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+    if (missingDisplayNames.length > 0) {
+        const { data: maxSort } = await admin.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
         let nextOrder = (maxSort?.sort_order ?? 0) + 1;
-
-        const newCatPayloads = missingCats.map(name => ({ name, sort_order: nextOrder++ }));
-        const { data: insertedCats } = await admin.from('categories').insert(newCatPayloads).select('id, name');
-
-        (insertedCats || []).forEach(c => catMap.set(c.name.toLowerCase(), c.id));
+        const newCatPayloads = missingDisplayNames.map(name => ({ name: name.trim(), sort_order: nextOrder++ }));
+        const { data: insertedCats, error: catInsErr } = await admin.from('categories').insert(newCatPayloads).select('id, name');
+        if (catInsErr) return { success: false, error: `Failed to create categories (${missingDisplayNames.join(', ')}): ${catInsErr.message}` };
+        (insertedCats || []).forEach(c => {
+            catMap.set(c.name.toLowerCase().trim(), c.id);
+            catNameMap.set(c.name.toLowerCase().trim(), c.name);
+        });
     }
 
     // 4. Fetch existing menu items
-    const { data: existingItems } = await admin
-        .from('menu_items')
-        .select('name, category_id');
-        
+    const { data: existingItems, error: itemsFetchErr } = await admin.from('menu_items').select('name, category_id');
+    if (itemsFetchErr) return { success: false, error: `Failed to fetch existing menu: ${itemsFetchErr.message}` };
+
     const existingItemKeys = new Set(
         (existingItems || []).map(item => `${item.name.toLowerCase().trim()}_${item.category_id}`)
     );
 
-    // 5. Filter out incoming items that already exist
+    // 5. Filter out incoming items that already exist (and validate category_id)
     const itemsToInsert: { name: string; price: number; category_id: string; is_available: boolean }[] = [];
-    for (const item of items) {
-        const catId = catMap.get(item.category.toLowerCase());
-        const key = `${item.name.toLowerCase().trim()}_${catId}`;
-        if (!existingItemKeys.has(key)) {
-            itemsToInsert.push({
-                name: item.name,
-                price: item.price,
-                category_id: catId,
-                is_available: true
-            });
-            // Prevent duplicates within the same batch upload
-            existingItemKeys.add(key);
+    let skippedDuplicates = 0;
+    let skippedNoCategory = 0;
+    for (const item of normalized) {
+        const catKey = item.category.toLowerCase().trim();
+        const catId = catMap.get(catKey);
+        if (!catId) {
+            skippedNoCategory++;
+            continue;
         }
+        const key = `${item.name.toLowerCase().trim()}_${catId}`;
+        if (existingItemKeys.has(key)) {
+            skippedDuplicates++;
+            continue;
+        }
+        itemsToInsert.push({
+            name: item.name.trim(),
+            price: item.price,
+            category_id: catId,
+            is_available: true
+        });
+        existingItemKeys.add(key);
     }
 
     if (itemsToInsert.length === 0) {
         revalidatePath('/staff/admin');
-        return { success: true, count: 0, message: 'All items already exist in the database' };
+        if (skippedDuplicates > 0 && skippedNoCategory === 0) {
+            return { success: true, count: 0, message: `All ${normalized.length} items already exist — ${skippedDuplicates} skipped as duplicates.` };
+        }
+        if (skippedNoCategory > 0) {
+            return { success: false, error: `No items could be inserted — ${skippedNoCategory} had unknown categories. This should not happen; please retry.` };
+        }
+        return { success: true, count: 0, message: 'No new items to insert.' };
     }
 
     const { error } = await admin.from('menu_items').insert(itemsToInsert);
     if (error) return { success: false, error: error.message };
 
     revalidatePath('/staff/admin');
-    return { success: true, count: itemsToInsert.length };
+    revalidatePath('/menu');
+    return { success: true, count: itemsToInsert.length, skippedDuplicates, message: skippedDuplicates > 0 ? `${itemsToInsert.length} inserted, ${skippedDuplicates} duplicates skipped.` : undefined };
 }
 
 // ─── Activity Log ────────────────────────────────────────────────────────────

@@ -27,8 +27,8 @@ export async function fetchAdminDashboardData() {
                 `)
                 .order('created_at', { ascending: false }),
             supabaseAdmin.from('staff_users').select('*, roles:roles!staff_users_role_id_fkey(name)'),
-            supabaseAdmin.from('menu_items').select('*, categories(name)').order('name'),
-            supabaseAdmin.from('roles').select('*, role_permissions(permissions(id, key))').order('name'),
+            supabaseAdmin.from('menu_items').select('*, categories:categories!menu_items_category_id_fkey(name)').order('name'),
+            supabaseAdmin.from('roles').select('*, role_permissions:role_permissions!role_permissions_role_id_fkey(permissions:permissions!role_permissions_permission_id_fkey(id, key))').order('name'),
             supabaseAdmin.from('permissions').select('*')
         ]);
 
