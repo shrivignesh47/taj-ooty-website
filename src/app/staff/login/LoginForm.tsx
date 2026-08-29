@@ -25,9 +25,14 @@ export function LoginForm() {
                 setLocalError(res.error);
                 setIsLoading(false);
             } else if (res?.success && res.redirectUrl && res.accessToken) {
-                // Set the auth cookie via document.cookie — guaranteed to reach
-                // the browser, unlike Server Action cookies() which may be lost.
-                document.cookie = `taj_token=${res.accessToken}; path=/; SameSite=Lax; max-age=${12 * 60 * 60}`;
+                // Set the auth cookie via document.cookie — belt + suspenders with
+                // the server-side Set-Cookie already sent by the Server Action.
+                // Add Secure on HTTPS so Vercel respects it; omit on localhost.
+                const isSecure = window.location.protocol === 'https:';
+                document.cookie = `taj_token=${res.accessToken}; path=/; SameSite=Lax; max-age=${12 * 60 * 60}${isSecure ? '; Secure' : ''}`;
+                // Small delay lets the browser commit the Set-Cookie from the
+                // Server Action response before the next document request.
+                await new Promise<void>((r) => setTimeout(r, 100));
                 window.location.href = res.redirectUrl;
             } else {
                 setLocalError("Unexpected response from server.");

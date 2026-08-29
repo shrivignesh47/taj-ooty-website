@@ -1,35 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
-import { COOKIE_NAME, decodeJwtPayload } from './features/ordering/lib/supabaseServer';
+import { COOKIE_NAME, USER_ID_HEADER, decodeJwtPayload } from './lib/authCookie';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Role → allowed route prefixes
-// A role can access a route if ANY of its allowed prefixes matches the path.
-// ─────────────────────────────────────────────────────────────────────────────
-const ROLE_ROUTES: Record<string, string[]> = {
-  admin:   ['/staff/admin', '/staff/dashboard'],
-  cashier: ['/staff/billing', '/staff/dashboard'],
-  waiter:  ['/staff/orders', '/staff/dashboard'],
-  kitchen: ['/staff/kitchen', '/staff/dashboard'],
-};
 
-// Routes that every authenticated staff member can access regardless of role
-const PUBLIC_STAFF_ROUTES = ['/staff/login'];
-
-function roleAllowed(role: string, pathname: string): boolean {
-  const allowed = ROLE_ROUTES[role.toLowerCase()] ?? [];
-  return allowed.some((prefix) => pathname.startsWith(prefix));
-}
-
-function defaultRouteForRole(role: string): string {
-  switch (role.toLowerCase()) {
-    case 'admin':   return '/staff/admin';
-    case 'cashier': return '/staff/billing';
-    case 'kitchen': return '/staff/kitchen';
-    case 'waiter':  return '/staff/orders';
-    default:        return '/staff/orders';
-  }
-}
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -80,8 +53,7 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // ── 3. Authenticated — fetch role from DB ─────────────────────────────────
-  let roleName = '';
+  // ── 3. Authenticated — check if account is active ─────────────────────────
   let isActive = true;
 
   if (serviceRole) {
@@ -89,16 +61,12 @@ export default async function proxy(request: NextRequest) {
       const admin = createClient(supabaseUrl, serviceRole);
       const { data: staffMember } = await admin
         .from('staff_users')
-        .select('is_active, roles(name)')
+        .select('is_active')
         .eq('auth_id', userId)
         .single();
 
       if (staffMember) {
         isActive = staffMember.is_active ?? true;
-        const roleData: unknown = staffMember.roles;
-        if (roleData && typeof roleData === 'object' && 'name' in roleData) {
-          roleName = String((roleData as { name: string }).name).toLowerCase();
-        }
       }
     } catch {
       // DB unreachable — fail open, let page-level auth handle it
@@ -112,26 +80,13 @@ export default async function proxy(request: NextRequest) {
     return res;
   }
 
-  // ── 4b. Authenticated + authorized → forward validated identity to the page ──
-  // Server Components read this header instead of relying on cookies, which
-  // guarantees they see the same identity the proxy validated.
-  requestHeaders.set('x-taj-user-id', userId);
-  response = NextResponse.next({ request: { headers: requestHeaders } });
-
-  // ── 5. Authenticated + on login page → redirect to their dashboard ────────
-  if (isLoginRoute) {
-    return NextResponse.redirect(new URL(defaultRouteForRole(roleName), request.url));
-  }
-
-  // ── 6. Authenticated but wrong role for this route → redirect to their dashboard ──
-  if (roleName && !roleAllowed(roleName, pathname)) {
-    const dest = defaultRouteForRole(roleName);
-    if (dest !== pathname) {
-      return NextResponse.redirect(new URL(`${dest}?error=Unauthorized`, request.url));
-    }
-  }
-
-  return response;
+  // ── 5. Authenticated → forward validated identity to the page ──────────────
+  // Server Components read this header via `headers()` instead of relying on
+  // cookie propagation which Vercel's split proxy→page functions was losing.
+  // Role-based redirects are handled by the pages themselves — proxy no longer
+  // redirects on role mismatch to avoid competing 307s and redirect loops.
+  requestHeaders.set(USER_ID_HEADER, userId);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

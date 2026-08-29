@@ -1,17 +1,15 @@
 import { cookies, headers } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
-
-export const COOKIE_NAME = 'taj_token';
-export const COOKIE_MAX_AGE = 12 * 60 * 60; // 12 hours
+import {
+    COOKIE_NAME,
+    COOKIE_MAX_AGE,
+    USER_ID_HEADER,
+    decodeJwtPayload,
+} from '@/lib/authCookie';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Request header set by the proxy after JWT validation. Server Components read
- * this instead of the raw cookie so identity is never lost between the proxy
- * and the page function.
- */
-export const USER_ID_HEADER = 'x-taj-user-id';
+export { COOKIE_NAME, COOKIE_MAX_AGE, USER_ID_HEADER, decodeJwtPayload };
 
 export function supabaseUrl() {
     return (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
@@ -21,21 +19,7 @@ export function supabaseAnonKey() {
     return (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
 }
 
-/**
- * Decode a JWT payload without any library. Returns null on failure.
- */
-export function decodeJwtPayload(token: string): Record<string, unknown> | null {
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-        const decoded = atob(padded);
-        return JSON.parse(decoded);
-    } catch {
-        return null;
-    }
-}
+
 
 /**
  * Read the authenticated user ID. Prefers the proxy-validated request header —

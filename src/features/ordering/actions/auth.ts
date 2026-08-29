@@ -1,21 +1,22 @@
 
 "use server";
 
-import { getAuthUserId, createAuthClient, COOKIE_NAME } from '../lib/supabaseServer';
+import { getAuthUserId, createAuthClient, COOKIE_NAME, decodeJwtPayload } from '../lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdminEdge = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function supabaseAdmin() {
+    const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^"/, '').replace(/"$/, '').trim();
+    const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^"/, '').replace(/"$/, '').trim();
+    return createClient(url, key);
+}
 
 export async function verifyStaff() {
     const userId = await getAuthUserId();
     if (!userId) return { success: false };
 
-    const { data: staffMember } = await supabaseAdminEdge
+    const { data: staffMember } = await supabaseAdmin()
         .from('staff_users')
         .select(`
             id,
@@ -45,7 +46,7 @@ export async function verifyStaff() {
 
     // Default admin override
     if (roleData?.name?.toLowerCase() === 'admin') {
-        const allPerms = await supabaseAdminEdge.from('permissions').select('key');
+        const allPerms = await supabaseAdmin().from('permissions').select('key');
         allPerms.data?.forEach(p => permissions.add(p.key));
     }
 
@@ -95,11 +96,11 @@ export async function loginStaff(formData: FormData) {
         });
 
         // Decode JWT to get user ID for role lookup
-        const payload = JSON.parse(atob(accessToken.split('.')[1]));
-        const userId: string = payload.sub;
+        const decoded = decodeJwtPayload(accessToken);
+        const userId: string = typeof decoded?.sub === 'string' ? decoded.sub : '';
 
         // Permission-based routing — honour admin's role assignments
-        const { data: staffMember } = await supabaseAdminEdge
+        const { data: staffMember } = await supabaseAdmin()
             .from('staff_users')
             .select(`
                 id,
@@ -118,7 +119,7 @@ export async function loginStaff(formData: FormData) {
         const permSet = new Set<string>();
 
         if (roleName === 'admin') {
-            const { data: allPerms } = await supabaseAdminEdge.from('permissions').select('key');
+            const { data: allPerms } = await supabaseAdmin().from('permissions').select('key');
             allPerms?.forEach(p => permSet.add(p.key));
         } else if (roleData?.role_permissions) {
             roleData.role_permissions.forEach((rp: { permissions?: { key: string } }) => {
@@ -128,7 +129,7 @@ export async function loginStaff(formData: FormData) {
 
         if (staffMember?.id) {
             try {
-                await supabaseAdminEdge.from('staff_activity_log').insert({
+                await supabaseAdmin().from('staff_activity_log').insert({
                     staff_id: staffMember.id,
                     action: 'LOGIN',
                     details: { method: 'password', role: roleName }
@@ -162,13 +163,13 @@ export async function logoutStaff() {
     const userId = await getAuthUserId();
 
     if (userId) {
-        const { data: staffMember } = await supabaseAdminEdge
+        const { data: staffMember } = await supabaseAdmin()
             .from('staff_users')
             .select('id')
             .eq('auth_id', userId)
             .single();
         if (staffMember?.id) {
-            await supabaseAdminEdge.from('staff_activity_log').insert({
+            await supabaseAdmin().from('staff_activity_log').insert({
                 staff_id: staffMember.id,
                 action: 'LOGOUT',
                 details: { trigger: 'user_action' }
