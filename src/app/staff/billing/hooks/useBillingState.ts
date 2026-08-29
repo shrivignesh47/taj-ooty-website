@@ -181,7 +181,7 @@ export function useBillingState(activeUser: ActiveStaffUser) {
                     order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
                 `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
                 supabase.from('menu_items').select('*, categories(name)').order('name'),
-                supabase.from('staff_users').select('*, roles(name)').order('name'),
+                supabase.from('staff_users').select('*, roles:roles!staff_users_role_id_fkey(name)').order('name'),
                 supabase.from('staff_attendance').select('*, staff_users(name)').order('clock_in', { ascending: false }).limit(100),
                 supabase.from('restaurant_settings').select('*').limit(1).single(),
                 supabase.from('roles').select('*, role_permissions(permissions(key))')

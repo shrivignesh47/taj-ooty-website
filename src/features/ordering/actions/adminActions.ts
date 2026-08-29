@@ -268,7 +268,7 @@ export async function fetchActivityLog() {
         const [auditRes, ordersRes, loyaltyRes] = await Promise.all([
             admin
                 .from('staff_activity_log')
-                .select('*, staff_users(name, roles(name))')
+                .select('*, staff_users(name, roles:roles!staff_users_role_id_fkey(name))')
                 .order('created_at', { ascending: false })
                 .limit(100),
             admin

@@ -18,36 +18,31 @@ export async function verifyStaff() {
 
     const { data: staffMember } = await supabaseAdmin()
         .from('staff_users')
-        .select(`
-            id,
-            name, 
-            roles (
-                name,
-                role_permissions (
-                    permissions (
-                        key
-                    )
-                )
-            )
-        `)
+        .select('id, name, role_id, roles:roles!staff_users_role_id_fkey(name)')
         .eq('auth_id', userId)
         .single();
 
     if (!staffMember) return { success: false };
 
-    const roleData = staffMember.roles as { name?: string; role_permissions?: { permissions?: { key: string } }[] } | null | undefined;
+    const roleNameRaw = (staffMember as unknown as { roles: { name?: string } | null }).roles?.name ?? 'Unknown';
     const permissions = new Set<string>();
 
-    if (roleData?.role_permissions) {
-        roleData.role_permissions.forEach((rp: { permissions?: { key: string } }) => {
-            if (rp.permissions?.key) permissions.add(rp.permissions.key);
-        });
-    }
-
-    // Default admin override
-    if (roleData?.name?.toLowerCase() === 'admin') {
-        const allPerms = await supabaseAdmin().from('permissions').select('key');
-        allPerms.data?.forEach(p => permissions.add(p.key));
+    if (roleNameRaw.toLowerCase() === 'admin') {
+        const { data: allPerms } = await supabaseAdmin().from('permissions').select('key');
+        allPerms?.forEach(p => permissions.add(p.key));
+    } else {
+        const roleId = (staffMember as unknown as { role_id: string | null }).role_id;
+        if (roleId) {
+            const { data: rp } = await supabaseAdmin()
+                .from('role_permissions')
+                .select('permission_id')
+                .eq('role_id', roleId);
+            if (rp && rp.length) {
+                const ids = rp.map(r => r.permission_id);
+                const { data: perms } = await supabaseAdmin().from('permissions').select('key').in('id', ids);
+                perms?.forEach(p => permissions.add(p.key));
+            }
+        }
     }
 
     return {
@@ -56,7 +51,7 @@ export async function verifyStaff() {
             id: staffMember.id,
             authId: userId,
             name: staffMember.name,
-            roleName: roleData?.name || 'Unknown',
+            roleName: roleNameRaw,
             permissions: Array.from(permissions)
         }
     };
@@ -99,32 +94,33 @@ export async function loginStaff(formData: FormData) {
         const decoded = decodeJwtPayload(accessToken);
         const userId: string = typeof decoded?.sub === 'string' ? decoded.sub : '';
 
-        // Permission-based routing — honour admin's role assignments
+        // Permission-based routing — honour admin's role assignments (two-step to avoid ambiguous FK embeds on cloud)
         const { data: staffMember } = await supabaseAdmin()
             .from('staff_users')
-            .select(`
-                id,
-                roles (
-                    name,
-                    role_permissions (
-                        permissions ( key )
-                    )
-                )
-            `)
+            .select('id, role_id, roles:roles!staff_users_role_id_fkey(name)')
             .eq('auth_id', userId)
             .single();
 
-        const roleData = staffMember?.roles as { name?: string; role_permissions?: { permissions?: { key: string } }[] } | null | undefined;
-        const roleName = roleData?.name?.toLowerCase() ?? '';
+        const roleNameRaw = (staffMember as unknown as { roles: { name?: string } | null } | null)?.roles?.name ?? '';
+        const roleName = roleNameRaw.toLowerCase();
         const permSet = new Set<string>();
 
         if (roleName === 'admin') {
             const { data: allPerms } = await supabaseAdmin().from('permissions').select('key');
             allPerms?.forEach(p => permSet.add(p.key));
-        } else if (roleData?.role_permissions) {
-            roleData.role_permissions.forEach((rp: { permissions?: { key: string } }) => {
-                if (rp.permissions?.key) permSet.add(rp.permissions.key);
-            });
+        } else {
+            const roleId = (staffMember as unknown as { role_id: string | null } | null)?.role_id;
+            if (roleId) {
+                const { data: rp } = await supabaseAdmin()
+                    .from('role_permissions')
+                    .select('permission_id')
+                    .eq('role_id', roleId);
+                if (rp && rp.length) {
+                    const ids = rp.map(r => r.permission_id);
+                    const { data: perms } = await supabaseAdmin().from('permissions').select('key').in('id', ids);
+                    perms?.forEach(p => permSet.add(p.key));
+                }
+            }
         }
 
         if (staffMember?.id) {
