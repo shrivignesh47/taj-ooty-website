@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList, ChevronLeft, ChevronDown, Gift } from 'lucide-react';
+import { Users, TrendingUp, ShieldCheck, Activity, LogOut, LayoutGrid, BookOpen, Settings, ClipboardList, ChevronLeft, ChevronDown, Gift, Menu, X } from 'lucide-react';
 import { logoutStaff } from '@/features/ordering/actions/auth';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -74,6 +74,7 @@ export function AdminDash() {
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Overview');
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
         operations: true,
         management: true,
@@ -447,23 +448,118 @@ export function AdminDash() {
             {/* ── Main ── */}
             <main className="flex-1 overflow-y-auto bg-[#F6EEDF] taj-scrollbar">
                 {/* Header */}
-                <header className="sticky top-0 z-40 bg-[#350C0C] border-b border-[#C9974A]/20 px-8 py-4 flex justify-between items-center shadow-md">
-                    <div>
-                        <h2 className="text-xl font-black text-[#F6EEDF] tracking-tight">
-                            {permittedTabs.find(t => t.id === activeTab)?.label ?? activeTab}
-                        </h2>
-                        <p className="text-[#C9974A] text-xs font-semibold tracking-wide">Hotel Taj Ooty</p>
-                    </div>
+                <header className="sticky top-0 z-40 bg-[#350C0C] border-b border-[#C9974A]/20 px-4 lg:px-8 py-3 lg:py-4 flex justify-between items-center shadow-md">
                     <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Live data" />
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="lg:hidden p-2 -ml-1 rounded-lg bg-[#4E1414] text-[#C9974A] border border-[#C9974A]/30 hover:bg-[#4E1414]/80 transition-colors"
+                            aria-label="Open menu"
+                        >
+                            <Menu className="w-5 h-5" />
+                        </button>
+                        <div>
+                            <h2 className="text-base lg:text-xl font-black text-[#F6EEDF] tracking-tight">
+                                {permittedTabs.find(t => t.id === activeTab)?.label ?? activeTab}
+                            </h2>
+                            <p className="text-[#C9974A] text-[10px] lg:text-xs font-semibold tracking-wide hidden sm:block">Hotel Taj Ooty</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 lg:gap-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse hidden sm:block" title="Live data" />
                         <NotificationCenter currentStaffId={activeUser?.id || 'admin_user'} currentRoleName={activeUser?.roleName || 'Admin'} />
-                        <div className="bg-[#F6EEDF] border border-[#C9974A]/30 px-4 py-2 rounded-full text-sm font-bold text-[#4E1414] flex items-center gap-2">
-                            <UserIcon /> Admin
+                        <div className="bg-[#F6EEDF] border border-[#C9974A]/30 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-bold text-[#4E1414] flex items-center gap-2">
+                            <UserIcon /> <span className="hidden sm:inline">Admin</span>
                         </div>
                     </div>
                 </header>
 
-                <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
+                {/* ── Mobile Drawer ── */}
+                <AnimatePresence>
+                    {isMobileMenuOpen && (
+                        <>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            />
+                            <motion.div
+                                initial={{ x: -300 }}
+                                animate={{ x: 0 }}
+                                exit={{ x: -300 }}
+                                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                                className="lg:hidden fixed inset-y-0 left-0 w-[85%] max-w-[320px] bg-[#4E1414] z-50 flex flex-col shadow-2xl border-r border-[#C9974A]/20 overflow-hidden"
+                            >
+                                <div className="flex items-center justify-between p-5 border-b border-[#C9974A]/20 shrink-0">
+                                    <div>
+                                        <h1 className="text-xl font-black text-[#F6EEDF] leading-tight">Taj Admin</h1>
+                                        <p className="text-[10px] text-[#C9974A] mt-1 uppercase tracking-[0.2em] font-bold">Restaurant Manager</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setIsMobileMenuOpen(false)}
+                                        className="p-2 rounded-lg bg-[#C9974A]/10 text-[#C9974A] hover:bg-[#C9974A]/20 hover:text-[#F6EEDF] transition-colors"
+                                        aria-label="Close menu"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto taj-scrollbar-dark">
+                                    {TAB_GROUPS.map(group => {
+                                        const groupTabs = permittedTabs.filter(t => group.tabs.includes(t.id));
+                                        if (groupTabs.length === 0) return null;
+                                        const isGroupExpanded = expandedGroups[group.key] ?? true;
+                                        return (
+                                            <div key={group.key} className="space-y-1">
+                                                <button
+                                                    onClick={() => toggleGroup(group.key)}
+                                                    className="w-full flex items-center justify-between px-3 py-2 text-[#C9974A]/80 hover:text-[#F6EEDF] font-bold text-[10px] uppercase tracking-wider transition-colors"
+                                                >
+                                                    <span>{group.label}</span>
+                                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupExpanded ? '' : '-rotate-90'}`} />
+                                                </button>
+                                                <AnimatePresence initial={false}>
+                                                    {isGroupExpanded && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: 'auto', opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="overflow-hidden space-y-0.5"
+                                                        >
+                                                            {groupTabs.map(tab => (
+                                                                <button
+                                                                    key={tab.id}
+                                                                    onClick={() => { setActiveTab(tab.id); setIsMobileMenuOpen(false); }}
+                                                                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-bold text-sm text-left transition-all ${activeTab === tab.id ? 'bg-[#C9974A] text-[#4E1414] shadow' : 'text-[#F6EEDF]/70 hover:bg-[#F6EEDF]/10 hover:text-[#F6EEDF]'}`}
+                                                                >
+                                                                    <span className={activeTab === tab.id ? 'text-[#4E1414]' : 'text-[#C9974A]/60'}>{NAV_TABS.find(t => t.id === tab.id)?.icon}</span>
+                                                                    <span className="flex-1">{tab.label}</span>
+                                                                    {tab.id === 'Tables' && occupiedCount > 0 && (
+                                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${activeTab === tab.id ? 'bg-[#4E1414] text-[#F6EEDF]' : 'bg-[#C9974A] text-[#4E1414]' }`}>{occupiedCount}</span>
+                                                                    )}
+                                                                </button>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        );
+                                    })}
+                                </nav>
+                                <div className="p-3 border-t border-[#C9974A]/20 shrink-0">
+                                    <form action={logoutStaff}>
+                                        <button type="submit" className="w-full flex items-center justify-center gap-2 py-3 text-[#F6EEDF]/60 hover:text-[#4E1414] hover:bg-[#F6EEDF] rounded-xl font-bold transition-all">
+                                            <LogOut className="w-4 h-4" /> Sign Out
+                                        </button>
+                                    </form>
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
+
+                <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
                     <AnimatePresence mode="wait">
 
                         {activeTab === 'Overview' && (
