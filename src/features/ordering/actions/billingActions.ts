@@ -316,12 +316,12 @@ export async function fetchBillingDashboardData() {
             supabaseAdmin.from('restaurant_tables').select('*').order('table_no'),
             supabaseAdmin.from('orders').select(`
                 id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                restaurant_tables(table_no, id),
+                restaurant_tables:restaurant_tables!orders_table_id_fkey(table_no, id),
                 order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
             `).in('status', ['confirmed', 'preparing', 'ready', 'served', 'on_hold']).order('created_at', { ascending: false }),
             supabaseAdmin.from('orders').select(`
                 id, status, created_at, customer_name, customer_phone, table_id, source, token_no,
-                restaurant_tables(table_no, id),
+                restaurant_tables:restaurant_tables!orders_table_id_fkey(table_no, id),
                 order_items(id, qty, price_at_order, notes, discount_percent, discount_reason, menu_items(id, name, is_veg))
             `).in('status', ['billed', 'cancelled']).order('created_at', { ascending: false }).limit(200),
             supabaseAdmin.from('menu_items').select('*, categories:categories!menu_items_category_id_fkey(name)').order('name'),

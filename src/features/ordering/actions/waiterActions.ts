@@ -419,7 +419,7 @@ export async function fetchWaiterDashboardData() {
                 .from('orders')
                 .select(`
                     *,
-                    restaurant_tables (*),
+                    restaurant_tables:restaurant_tables!orders_table_id_fkey (*),
                     order_items (
                         *,
                         menu_items (name)
@@ -452,7 +452,7 @@ export async function fetchKitchenOrdersData() {
             .from('orders')
             .select(`
                 *,
-                restaurant_tables (*),
+                restaurant_tables:restaurant_tables!orders_table_id_fkey (*),
                 order_items (
                     *,
                     menu_items (name, is_veg, category_id)
