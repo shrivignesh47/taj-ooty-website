@@ -22,8 +22,8 @@ export async function fetchAdminDashboardData() {
             supabaseAdmin.from('orders')
                 .select(`
                     *,
-                    restaurant_tables (table_no),
-                    order_items (qty, price_at_order, menu_item_id)
+                    restaurant_tables:restaurant_tables!orders_table_id_fkey (table_no),
+                    order_items:order_items!order_items_order_id_fkey (qty, price_at_order, menu_item_id)
                 `)
                 .order('created_at', { ascending: false }),
             supabaseAdmin.from('staff_users').select('*, roles:roles!staff_users_role_id_fkey(name)'),

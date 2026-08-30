@@ -420,11 +420,11 @@ export async function fetchWaiterDashboardData() {
                 .select(`
                     *,
                     restaurant_tables:restaurant_tables!orders_table_id_fkey (*),
-                    order_items (
+                    order_items:order_items!order_items_order_id_fkey (
                         *,
-                        menu_items (name)
+                        menu_items:menu_items!order_items_menu_item_id_fkey (name)
                     ),
-                    order_status_history (
+                    order_status_history:order_status_history!order_status_history_order_id_fkey (
                         status,
                         changed_at
                     )
@@ -453,11 +453,11 @@ export async function fetchKitchenOrdersData() {
             .select(`
                 *,
                 restaurant_tables:restaurant_tables!orders_table_id_fkey (*),
-                order_items (
+                order_items:order_items!order_items_order_id_fkey (
                     *,
-                    menu_items (name, is_veg, category_id)
+                    menu_items:menu_items!order_items_menu_item_id_fkey (name, is_veg, category_id)
                 ),
-                order_status_history (
+                order_status_history:order_status_history!order_status_history_order_id_fkey (
                     status,
                     changed_at
                 )
